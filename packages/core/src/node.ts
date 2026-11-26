@@ -8,6 +8,8 @@ export interface NodeInit {
   rotation?: number;
   scaleX?: number;
   scaleY?: number;
+  /** Allowed local rotation range in radians, [min, max]. */
+  limits?: readonly [number, number] | null;
 }
 
 /**
@@ -19,6 +21,8 @@ export class Node {
   readonly name: string;
   parent: Node | null = null;
   readonly children: Node[] = [];
+  /** Allowed local rotation range in radians. Enforced by solvers and `constrain()`. */
+  limits: readonly [number, number] | null;
 
   #x: number;
   #y: number;
@@ -37,6 +41,20 @@ export class Node {
     this.#rotation = init.rotation ?? 0;
     this.#scaleX = init.scaleX ?? 1;
     this.#scaleY = init.scaleY ?? 1;
+    this.limits = init.limits ?? null;
+    if (this.limits && this.limits[0] > this.limits[1]) {
+      throw new Error(`Animeant: "${this.name}" has limits with min > max`);
+    }
+  }
+
+  /** Clamp rotation into `limits`. Returns true if it had to move. */
+  constrain(): boolean {
+    if (!this.limits) return false;
+    const [min, max] = this.limits;
+    const r = Math.min(max, Math.max(min, this.#rotation));
+    if (r === this.#rotation) return false;
+    this.rotation = r;
+    return true;
   }
 
   get x() { return this.#x; }

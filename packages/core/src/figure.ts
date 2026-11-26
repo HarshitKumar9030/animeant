@@ -9,6 +9,8 @@ export interface RigNode {
   y?: number;
   /** Local rotation in radians. */
   rotation?: number;
+  /** Allowed local rotation range in radians, [min, max]. */
+  limits?: [number, number];
 }
 
 export interface Rig {

@@ -72,3 +72,17 @@ describe("Node forward kinematics", () => {
     expect(local.y).toBeCloseTo(0);
   });
 });
+
+describe("Node limits", () => {
+  it("clamps rotation into its range", () => {
+    const n = new Node({ name: "elbow", limits: [-1, 0.5] });
+    n.rotation = 2;
+    expect(n.constrain()).toBe(true);
+    expect(n.rotation).toBe(0.5);
+    expect(n.constrain()).toBe(false);
+  });
+
+  it("rejects inverted limits", () => {
+    expect(() => new Node({ name: "x", limits: [1, -1] })).toThrow(/min > max/);
+  });
+});
