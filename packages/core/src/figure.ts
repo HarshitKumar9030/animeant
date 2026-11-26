@@ -12,6 +12,8 @@ export interface RigNode {
   rotation?: number;
   /** Allowed local rotation range in radians, [min, max]. */
   limits?: [number, number];
+  /** Free-form data for renderers and tools. */
+  meta?: Record<string, unknown>;
 }
 
 export interface Rig {

@@ -10,6 +10,8 @@ export interface NodeInit {
   scaleY?: number;
   /** Allowed local rotation range in radians, [min, max]. */
   limits?: readonly [number, number] | null;
+  /** Free-form data for renderers and tools, e.g. `{ boneWidth: 2 }`. */
+  meta?: Record<string, unknown>;
 }
 
 /**
@@ -23,6 +25,8 @@ export class Node {
   readonly children: Node[] = [];
   /** Allowed local rotation range in radians. Enforced by solvers and `constrain()`. */
   limits: readonly [number, number] | null;
+  /** Free-form data for renderers and tools. Core never reads it. */
+  meta: Record<string, unknown>;
 
   #x: number;
   #y: number;
@@ -42,6 +46,7 @@ export class Node {
     this.#scaleX = init.scaleX ?? 1;
     this.#scaleY = init.scaleY ?? 1;
     this.limits = init.limits ?? null;
+    this.meta = { ...init.meta };
     if (this.limits && this.limits[0] > this.limits[1]) {
       throw new Error(`Animeant: "${this.name}" has limits with min > max`);
     }
