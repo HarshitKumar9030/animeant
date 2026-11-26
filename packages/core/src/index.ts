@@ -7,3 +7,5 @@ export { Figure, type Rig, type RigNode } from "./figure";
 export { humanoid } from "./rigs/humanoid";
 export { Ticker, type TickerOptions, type FixedCallback, type FrameCallback } from "./ticker";
 export { Chain, type Solver, type SolveOptions, type SolveResult } from "./ik/chain";
+export { easings, cubicBezier, resolveEase, damp, type Ease, type EaseFn, type EaseName } from "./anim/easing";
+export { Tween, Tweens, type TweenOptions, type TweenProps } from "./anim/tween";
