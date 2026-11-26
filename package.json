@@ -7,7 +7,8 @@
     "build": "pnpm -r build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p packages/core --noEmit && tsc -p packages/canvas --noEmit && tsc -p apps/playground --noEmit"
+    "typecheck": "tsc -p packages/core --noEmit && tsc -p packages/canvas --noEmit && tsc -p apps/playground --noEmit",
+    "bench": "vitest bench --run"
   },
   "devDependencies": {
     "typescript": "^5.6.3",

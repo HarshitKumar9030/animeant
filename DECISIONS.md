@@ -72,3 +72,13 @@ range and stick there forever. All solvers turn joints through it.
 ## 016 — Multi-child joints use a least-squares fit
 Hips and chest have several children. Their rotation is the 2D Kabsch fit,
 atan2(Σ cross, Σ dot), so long bones dominate and an 8px shoulder stub can't twist the chest.
+
+## 017 — Hot paths allocate nothing; no WASM yet
+Benchmarks live in `packages/core/bench` (`pnpm bench`). The first run showed the cost was
+per-step allocation, not arithmetic: Maps and string keys in `Animator.apply`, arrays and
+`{x, y}` objects in the ragdoll write-back. Fixing those in TypeScript made 100 layered
+animators 1.7× faster (1.05 → 0.61 ms/step) and 100 ragdolls 1.7× faster (1.76 → 1.06 ms/step).
+What remains is structural: every joint turn dirties its subtree, so FABRIK on a 64-joint chain
+is O(n²) in matrix rebuilds. WASM would not fix that, and the node tree lives in JS objects, so
+each step would copy every node across the boundary. `packages/wasm` stays empty until a scene
+we care about misses its frame budget after the TypeScript is tight.

@@ -44,6 +44,7 @@ tweens.to(fig.node("head"), { rotation: 0.3 }, { duration: 0.5, ease: "outBack" 
 pnpm install
 pnpm dev      # playground
 pnpm test     # unit tests
+pnpm bench    # performance scenes (packages/core/bench)
 ```
 
 See [DECISIONS.md](DECISIONS.md) for the architecture calls.
