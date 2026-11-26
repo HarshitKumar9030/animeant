@@ -8,7 +8,7 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": false,
     "declaration": true,
-    "composite": true,
+    "composite": false,
     "skipLibCheck": true,
     "isolatedModules": true
   }
