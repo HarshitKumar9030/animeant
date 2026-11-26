@@ -23,7 +23,13 @@ export interface DrawOptions {
   target?: { x: number; y: number; amount: number; reached: boolean } | null;
   /** Show a node's allowed rotation range as a wedge. */
   limits?: { node: Node; amount: number } | null;
+  /** A ground line at this y, eased in by amount. */
+  floor?: { y: number; amount: number } | null;
 }
+
+/** Per-bone width from the child node's `meta.boneWidth` (0 hides the bone). */
+const metaWidth = (n: Node): number | undefined =>
+  typeof n.meta.boneWidth === "number" ? n.meta.boneWidth : undefined;
 
 export const defaultTheme: CanvasTheme = {
   bone: "#1d1d1f",
@@ -76,19 +82,44 @@ export class CanvasRenderer {
     const jointR = opts.jointRadius ?? 4.5;
     const headR = opts.headRadius ?? 16;
 
+    if (opts.floor && opts.floor.amount > 0.001) {
+      ctx.save();
+      ctx.globalAlpha = 0.35 * opts.floor.amount;
+      ctx.strokeStyle = theme.root;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 6]);
+      ctx.beginPath();
+      ctx.moveTo(0, opts.floor.y + 0.5);
+      ctx.lineTo(this.width, opts.floor.y + 0.5);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.lineWidth = boneWidth;
     ctx.strokeStyle = theme.bone;
-    ctx.beginPath();
-    for (const [a, b] of figure.bones()) {
-      if (b.name === "head") continue;
-      const p = a.worldPosition;
-      const q = b.worldPosition;
-      ctx.moveTo(p.x, p.y);
-      ctx.lineTo(q.x, q.y);
+    // Group bones by width so each width is one stroke.
+    const groups = new Map<number, [Node, Node][]>();
+    for (const bone of figure.bones()) {
+      if (bone[1].name === "head") continue;
+      const custom = metaWidth(bone[1]);
+      const w = custom === undefined ? boneWidth : custom * (boneWidth / 4);
+      if (w <= 0) continue;
+      let g = groups.get(w);
+      if (!g) groups.set(w, (g = []));
+      g.push(bone);
     }
-    ctx.stroke();
+    for (const [w, bones] of groups) {
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      for (const [a, b] of bones) {
+        const p = a.worldPosition;
+        const q = b.worldPosition;
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(q.x, q.y);
+      }
+      ctx.stroke();
+    }
 
     if (figure.has("head")) {
       const head = figure.node("head");
@@ -114,9 +145,13 @@ export class CanvasRenderer {
 
     for (const node of figure.nodes) {
       const p = node.worldPosition;
+      const custom = metaWidth(node);
+      // Thin, decorative chains get small joints; a hidden anchor gets none.
+      const r = custom === undefined ? jointR : custom === 0 ? 0 : jointR * 0.6;
+      if (r <= 0) continue;
       ctx.beginPath();
       ctx.fillStyle = node === figure.root ? theme.root : theme.joint;
-      ctx.arc(p.x, p.y, jointR, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
       ctx.fill();
     }
 

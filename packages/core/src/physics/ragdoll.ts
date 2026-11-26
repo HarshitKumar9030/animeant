@@ -147,6 +147,7 @@ export class Ragdoll {
     if (g) { g.p.x = g.x; g.p.y = g.y; }
 
     this.#writeBack();
+    const before = { x: this.figure.root.x, y: this.figure.root.y };
     // Write-back runs from the root out, so errors pile up at the far end of a
     // chain. Shift the whole body so the grabbed node sits exactly on the pointer.
     if (g) {
@@ -155,10 +156,17 @@ export class Ragdoll {
       this.figure.root.y += g.y - w.y;
     }
     this.#pushInside();
+    // Those rigid shifts are corrections, not motion: carry previous positions
+    // along so they don't turn into velocity and pump energy into the body.
+    const sx = this.figure.root.x - before.x;
+    const sy = this.figure.root.y - before.y;
 
-    // Project onto the solved pose; the correction becomes velocity.
+    // Project onto the solved pose. Otherwise previous positions stay put, so
+    // next step's velocity is the motion the figure actually made.
     for (const p of parts) {
       const w = p.node.worldPosition;
+      p.px += sx;
+      p.py += sy;
       p.x = w.x;
       p.y = w.y;
     }

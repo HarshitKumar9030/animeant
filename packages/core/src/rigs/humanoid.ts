@@ -16,7 +16,7 @@ export const humanoid: Rig = {
     { name: "head", parent: "neck", y: -26 },
 
     // A short ponytail off the back of the head, for secondary motion.
-    { name: "hair1", parent: "head", x: -13, y: -12, meta: { boneWidth: 0 } },
+    { name: "hair1", parent: "head", x: -15, y: -6, meta: { boneWidth: 0 } },
     { name: "hair2", parent: "hair1", x: -9, y: 12, limits: [deg(-80), deg(80)], meta: { boneWidth: 3 } },
     { name: "hair3", parent: "hair2", x: -5, y: 13, limits: [deg(-70), deg(70)], meta: { boneWidth: 2.5 } },
     { name: "hair4", parent: "hair3", x: -3, y: 12, limits: [deg(-70), deg(70)], meta: { boneWidth: 2 } },

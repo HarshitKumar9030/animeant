@@ -52,6 +52,25 @@ export class Node {
     }
   }
 
+  /**
+   * Turn by `delta` radians and respect limits. With limits, the result is
+   * taken as whichever of r, r ± 2π lies inside (or nearest) the range before
+   * clamping, so a turn that crosses ±π can't wrap to the wrong end of the
+   * range and stick there.
+   */
+  turn(delta: number): void {
+    let r = this.#rotation + delta;
+    if (this.limits) {
+      const [min, max] = this.limits;
+      const TAU = Math.PI * 2;
+      const gap = (v: number) => (v < min ? min - v : v > max ? v - max : 0);
+      let best = r;
+      for (const c of [r - TAU, r + TAU]) if (gap(c) < gap(best)) best = c;
+      r = Math.min(max, Math.max(min, best));
+    }
+    this.rotation = r;
+  }
+
   /** Clamp rotation into `limits`. Returns true if it had to move. */
   constrain(): boolean {
     if (!this.limits) return false;

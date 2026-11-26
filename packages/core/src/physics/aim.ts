@@ -1,4 +1,3 @@
-import { angleDelta } from "../math/angle";
 import type { Vec2 } from "../math/vec2";
 import type { Node } from "../node";
 
@@ -9,27 +8,25 @@ export const handedness = (node: Node): number => {
 };
 
 /**
- * Rotate `node` so its children point at `targets` as closely as one
- * rotation allows: the circular mean of each child's wanted turn. Children without a target are ignored. Then clamp to limits.
+ * Rotate `node` so its children best match `targets`: the least-squares
+ * rotation about the node (2D Kabsch), atan2(Σ cross, Σ dot) over each
+ * child's current offset and wanted offset. Long bones outweigh short
+ * stubs, so a chest isn't twisted by a shoulder nudged a few pixels.
+ * Children without a target are ignored. Limits apply via `turn`.
  */
 export function aimAt(node: Node, targets: (Vec2 | undefined)[]): void {
   const p = node.worldPosition;
-  // Circular mean of each child's wanted turn: robust when turns straddle ±π.
-  let sx = 0;
-  let sy = 0;
-  let n = 0;
+  let cross = 0;
+  let dot = 0;
   node.children.forEach((child, i) => {
     const t = targets[i];
     if (!t) return;
     const c = child.worldPosition;
-    if (Math.hypot(t.x - p.x, t.y - p.y) < 1e-6) return;
-    const d = angleDelta(Math.atan2(c.y - p.y, c.x - p.x), Math.atan2(t.y - p.y, t.x - p.x));
-    sx += Math.cos(d);
-    sy += Math.sin(d);
-    n++;
+    const ax = c.x - p.x, ay = c.y - p.y;
+    const bx = t.x - p.x, by = t.y - p.y;
+    cross += ax * by - ay * bx;
+    dot += ax * bx + ay * by;
   });
-  if (!n) return;
-  if (Math.hypot(sx, sy) < 1e-9) return;
-  node.rotation += Math.atan2(sy, sx) * handedness(node);
-  node.constrain();
+  if (Math.hypot(cross, dot) < 1e-9) return;
+  node.turn(Math.atan2(cross, dot) * handedness(node));
 }

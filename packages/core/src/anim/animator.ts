@@ -150,6 +150,16 @@ export class Animator {
   }
 
   /**
+   * Drop every playback immediately without writing anything, leaving the
+   * figure exactly as it is. For handing the pose to something else, like
+   * a ragdoll. (`stop(undefined, 0)` would snap back to the base pose.)
+   */
+  clear(): void {
+    this.#playbacks = [];
+    this.#slots.clear();
+  }
+
+  /**
    * Re-read base values from the figure. With no args, every known channel;
    * call with a node (and channel) when something else owns that value,
    * e.g. a host that positions the root each frame.

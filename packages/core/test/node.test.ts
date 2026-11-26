@@ -86,3 +86,20 @@ describe("Node limits", () => {
     expect(() => new Node({ name: "x", limits: [1, -1] })).toThrow(/min > max/);
   });
 });
+
+describe("Node.turn", () => {
+  it("turns freely without limits", () => {
+    const n = new Node({ name: "n", rotation: 3 });
+    n.turn(0.5);
+    expect(n.rotation).toBeCloseTo(3.5);
+  });
+
+  it("never wraps to the wrong end of its limits", () => {
+    // At +130°, asked to reach -115° the short way (+115°, i.e. 245°):
+    // that is -115° once wrapped, which is inside the range.
+    const deg = Math.PI / 180;
+    const n = new Node({ name: "shoulder", rotation: 130 * deg, limits: [-110 * deg, 130 * deg] });
+    n.turn(115 * deg);
+    expect(n.rotation).toBeCloseTo(-110 * deg);
+  });
+});

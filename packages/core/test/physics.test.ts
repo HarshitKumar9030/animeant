@@ -88,8 +88,14 @@ describe("Ragdoll", () => {
       rd.step(1 / 120);
     }
     run(() => rd.step(1 / 120), 600);
-    expect(distance(hand.worldPosition, { x: 300, y: 100 })).toBeLessThan(6);
-    expect(fig.root.y).toBeGreaterThan(hand.worldPosition.y);
+    expect(distance(hand.worldPosition, { x: 300, y: 100 })).toBeLessThan(1);
+    // Hangs below the hand, upright, and has stopped moving (no energy pumping).
+    expect(fig.root.y - hand.worldPosition.y).toBeGreaterThan(150);
+    expect(Math.abs(fig.root.rotation)).toBeLessThan(0.5);
+    const settled = { x: fig.root.x, y: fig.root.y, r: fig.root.rotation };
+    run(() => rd.step(1 / 120), 120);
+    expect(Math.abs(fig.root.x - settled.x)).toBeLessThan(10); // a gentle pendulum sway, not runaway
+    expect(Math.abs(fig.root.rotation - settled.r)).toBeLessThan(0.05);
     for (let i = 0; i < 10; i++) { rd.drag({ x: 300 + i * 6, y: 100 }); rd.step(1 / 120); }
     rd.release();
     const x0 = fig.root.x;

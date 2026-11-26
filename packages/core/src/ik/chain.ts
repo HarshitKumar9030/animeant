@@ -85,8 +85,7 @@ export class Chain {
     // Parent space may be mirrored (negative scale); flip the turn to match.
     const m = joint.parent?.worldMatrix;
     const flip = m && m[0]! * m[3]! - m[1]! * m[2]! < 0 ? -1 : 1;
-    joint.rotation += angleDelta(current, wanted) * flip;
-    joint.constrain();
+    joint.turn(angleDelta(current, wanted) * flip);
   }
 
   /** One backward + forward FABRIK sweep, then map positions back to rotations. */
@@ -122,8 +121,7 @@ export class Chain {
       const wanted = Math.atan2(target.y - p.y, target.x - p.x);
       const m = joint.parent?.worldMatrix;
       const flip = m && m[0]! * m[3]! - m[1]! * m[2]! < 0 ? -1 : 1;
-      joint.rotation += angleDelta(current, wanted) * flip;
-      joint.constrain();
+      joint.turn(angleDelta(current, wanted) * flip);
     }
   }
 }

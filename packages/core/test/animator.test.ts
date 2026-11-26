@@ -120,6 +120,18 @@ describe("Animator", () => {
     expect(fig.root.y).toBeCloseTo(300);
   });
 
+  it("clear hands the pose over untouched", () => {
+    const fig = rig();
+    const anim = new Animator(fig);
+    anim.play(swing, { fade: 0 });
+    anim.update(0.5);
+    anim.clear();
+    fig.node("arm").rotation = 0.25;
+    anim.update(0.1);
+    expect(anim.active).toBe(false);
+    expect(fig.node("arm").rotation).toBe(0.25);
+  });
+
   it("refuses clips for nodes the figure lacks", () => {
     const anim = new Animator(rig());
     expect(() => anim.play({ name: "x", duration: 1, tracks: { tail: { x: [[0, 1]] } } })).toThrow(/unknown node/);
