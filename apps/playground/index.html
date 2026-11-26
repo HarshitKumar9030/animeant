@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Animeant Playground</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="bar">
+        <div class="brand">
+          <span class="brand-name">animeant</span>
+          <span class="brand-tag">Phase 1 · Forward kinematics</span>
+        </div>
+        <div class="bar-actions">
+          <label class="toggle" data-cursor="pointer">
+            <input type="checkbox" id="sway" />
+            <span class="toggle-track"><span class="toggle-knob"></span></span>
+            <span class="toggle-label">Idle sway</span>
+          </label>
+          <button class="btn" id="reset" type="button">
+            <span class="btn-label">Reset pose</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="stage">
+        <canvas id="canvas" aria-label="Figure stage"></canvas>
+        <p class="hint" id="hint"><span class="hint-long">Drag any joint. Its parent rotates, everything below follows.</span><span class="hint-short">Drag any joint</span></p>
+        <div class="readout" id="readout" aria-live="polite">
+          <span class="readout-name" id="readout-name">hips</span>
+          <span class="readout-value" id="readout-value">0°</span>
+        </div>
+      </main>
+
+      <aside class="panel" id="panel">
+        <button class="panel-handle" id="panel-handle" type="button" aria-label="Toggle node list">
+          <span></span>
+        </button>
+        <div class="panel-head">
+          <span class="panel-title">Nodes</span>
+          <span class="panel-count" id="count"></span>
+        </div>
+        <ul class="nodes" id="nodes">
+          <span class="nodes-highlight" id="highlight"></span>
+        </ul>
+      </aside>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

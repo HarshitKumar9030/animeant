@@ -15,6 +15,19 @@ importers:
         specifier: ^2.1.4
         version: 2.1.9
 
+  apps/playground:
+    dependencies:
+      '@animeant/canvas':
+        specifier: workspace:*
+        version: link:../../packages/canvas
+      '@animeant/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+    devDependencies:
+      vite:
+        specifier: ^5.4.10
+        version: 5.4.21
+
   packages/canvas:
     dependencies:
       '@animeant/core':
