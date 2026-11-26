@@ -12,3 +12,6 @@ export { Tween, Tweens, type TweenOptions, type TweenProps } from "./anim/tween"
 export { compileClip, sampleTrack, CHANNELS, type Clip, type Key, type Channel, type CompiledClip, type CompiledTrack } from "./anim/clip";
 export { Animator, Playback, type PlayOptions, type BlendMode } from "./anim/animator";
 export { humanoidClips } from "./clips/humanoid";
+export { SpringChain, type SpringOptions } from "./physics/spring";
+export { Ragdoll, type RagdollOptions, type Bounds } from "./physics/ragdoll";
+export { aimAt } from "./physics/aim";
