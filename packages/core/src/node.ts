@@ -65,7 +65,8 @@ export class Node {
       const TAU = Math.PI * 2;
       const gap = (v: number) => (v < min ? min - v : v > max ? v - max : 0);
       let best = r;
-      for (const c of [r - TAU, r + TAU]) if (gap(c) < gap(best)) best = c;
+      if (gap(r - TAU) < gap(best)) best = r - TAU;
+      if (gap(r + TAU) < gap(best)) best = r + TAU;
       r = Math.min(max, Math.max(min, best));
     }
     this.rotation = r;

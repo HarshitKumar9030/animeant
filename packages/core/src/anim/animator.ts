@@ -38,6 +38,8 @@ export class Playback {
   fade: number;
   readonly hold: boolean;
   readonly seq: number;
+  /** @internal Slot per compiled track, resolved once by the animator. */
+  slots: Slot[] = [];
   #resolve!: () => void;
   #ended = false;
 
@@ -101,7 +103,19 @@ export class Playback {
   endIfLooping(): void { if (this.loop) this.#resolve(); }
 }
 
-interface Slot { node: Node; channel: Channel; base: number; }
+/** @internal One animated channel on one node, plus per-frame blend scratch. */
+export interface Slot {
+  node: Node;
+  channel: Channel;
+  base: number;
+  rootMotion: boolean;
+  value: number;
+  sumV: number;
+  sumW: number;
+  /** Frame stamp for `value`, and layer stamp for `sumV`/`sumW`. */
+  frame: number;
+  layer: number;
+}
 
 /**
  * Plays clips on a figure in layers. Every frame each animated channel starts
@@ -118,6 +132,10 @@ export class Animator {
   #playbacks: Playback[] = [];
   readonly #slots = new Map<string, Slot>();
   #seq = 0;
+  #frame = 0;
+  #layer = 0;
+  readonly #touched: Slot[] = [];
+  readonly #summed: Slot[] = [];
 
   constructor(figure: Figure) {
     this.figure = figure;
@@ -138,7 +156,7 @@ export class Animator {
     for (const other of this.#playbacks) {
       if (other.layer === pb.layer && !other.stopping) other.stop(pb.fade);
     }
-    for (const t of compiled.tracks) this.#slot(t.node, t.channel);
+    pb.slots = compiled.tracks.map((t) => this.#slot(t.node, t.channel));
     this.#playbacks.push(pb);
     this.#playbacks.sort((a, b) => a.layer - b.layer || a.seq - b.seq);
     return pb;
@@ -177,7 +195,8 @@ export class Animator {
     let slot = this.#slots.get(key);
     if (!slot) {
       const node = this.figure.node(name);
-      slot = { node, channel, base: node[channel] };
+      const rootMotion = node === this.figure.root && (channel === "x" || channel === "y");
+      slot = { node, channel, base: node[channel], rootMotion, value: 0, sumV: 0, sumW: 0, frame: -1, layer: -1 };
       this.#slots.set(key, slot);
     }
     return slot;
@@ -195,46 +214,51 @@ export class Animator {
 
   /** Write the blended pose for the current times without advancing. */
   apply(): void {
-    const values = new Map<Slot, number>();
-    const touched = new Set<Slot>();
+    // Runs every fixed step for every figure, so it allocates nothing:
+    // blend state lives on the slots, stamped per frame and per layer.
+    const frame = ++this.#frame;
+    const touched = this.#touched;
+    touched.length = 0;
     for (const pb of this.#playbacks) {
-      for (const t of pb.compiled.tracks) touched.add(this.#slot(t.node, t.channel));
+      for (const slot of pb.slots) {
+        if (slot.frame !== frame) { slot.frame = frame; slot.value = slot.base; touched.push(slot); }
+      }
     }
-    for (const s of touched) values.set(s, s.base);
 
     // Playbacks are sorted by layer. Within a layer, override clips are
     // averaged by weight (so a crossfade sums to a full pose) and the result
     // blends over the layers below by the layer's total weight, capped at 1.
     // Additive clips add their change from frame 0, scaled by weight.
-    let i = 0;
     const list = this.#playbacks;
+    const summed = this.#summed;
+    let i = 0;
     while (i < list.length) {
       const layer = list[i]!.layer;
-      const sum = new Map<Slot, { v: number; w: number }>();
+      const stamp = ++this.#layer;
+      summed.length = 0;
       for (; i < list.length && list[i]!.layer === layer; i++) {
         const pb = list[i]!;
         if (pb.weight <= 0) continue;
         const t = pb.localTime;
-        for (const track of pb.compiled.tracks) {
-          const slot = this.#slot(track.node, track.channel);
+        const tracks = pb.compiled.tracks;
+        for (let k = 0; k < tracks.length; k++) {
+          const track = tracks[k]!;
+          const slot = pb.slots[k]!;
           const sample = sampleTrack(track, t);
           // Root translation is always relative to where the host put the figure.
-          const rootMotion = slot.node === this.figure.root && (slot.channel === "x" || slot.channel === "y");
-          if (pb.mode === "additive" || rootMotion) {
-            values.set(slot, values.get(slot)! + (sample - track.values[0]!) * pb.weight);
+          if (pb.mode === "additive" || slot.rootMotion) {
+            slot.value += (sample - track.values[0]!) * pb.weight;
           } else {
-            const acc = sum.get(slot) ?? { v: 0, w: 0 };
-            acc.v += sample * pb.weight;
-            acc.w += pb.weight;
-            sum.set(slot, acc);
+            if (slot.layer !== stamp) { slot.layer = stamp; slot.sumV = 0; slot.sumW = 0; summed.push(slot); }
+            slot.sumV += sample * pb.weight;
+            slot.sumW += pb.weight;
           }
         }
       }
-      for (const [slot, { v, w }] of sum) {
-        const below = values.get(slot)!;
-        values.set(slot, below + (v / w - below) * Math.min(1, w));
+      for (const slot of summed) {
+        slot.value += (slot.sumV / slot.sumW - slot.value) * Math.min(1, slot.sumW);
       }
     }
-    for (const [slot, v] of values) slot.node[slot.channel] = v;
+    for (const slot of touched) slot.node[slot.channel] = slot.value;
   }
 }

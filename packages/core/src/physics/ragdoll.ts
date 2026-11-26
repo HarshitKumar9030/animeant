@@ -43,6 +43,9 @@ export class Ragdoll {
   bounce: number;
   iterations: number;
   #parts = new Map<Node, P>();
+  #list: P[] = [];
+  /** Nodes with children, parent first, each with its children's particles. */
+  #aims: { node: Node; targets: P[] }[] = [];
   #links: Link[] = [];
   #grab: { p: P; x: number; y: number } | null = null;
   #active = false;
@@ -77,6 +80,11 @@ export class Ragdoll {
       // Siblings keep their spacing so branch points (hips, chest) stay rigid.
       for (let i = 0; i < node.children.length; i++)
         for (let j = i + 1; j < node.children.length; j++) link(node.children[i]!, node.children[j]!);
+    }
+    this.#list = [...this.#parts.values()];
+    this.#aims = [];
+    for (const node of this.figure.root.walk()) {
+      if (node.children.length) this.#aims.push({ node, targets: node.children.map((c) => this.#parts.get(c)!) });
     }
     this.#active = true;
   }
@@ -113,7 +121,7 @@ export class Ragdoll {
     if (!this.#active) return;
     const gx = this.gravity.x * dt * dt;
     const gy = this.gravity.y * dt * dt;
-    const parts = [...this.#parts.values()];
+    const parts = this.#list;
 
     for (const p of parts) {
       const vx = (p.x - p.px) * this.damping;
@@ -147,28 +155,28 @@ export class Ragdoll {
     if (g) { g.p.x = g.x; g.p.y = g.y; }
 
     this.#writeBack();
-    const before = { x: this.figure.root.x, y: this.figure.root.y };
+    const bx = this.figure.root.x, by = this.figure.root.y;
     // Write-back runs from the root out, so errors pile up at the far end of a
     // chain. Shift the whole body so the grabbed node sits exactly on the pointer.
     if (g) {
-      const w = g.p.node.worldPosition;
-      this.figure.root.x += g.x - w.x;
-      this.figure.root.y += g.y - w.y;
+      const w = g.p.node.worldMatrix;
+      this.figure.root.x += g.x - w[4]!;
+      this.figure.root.y += g.y - w[5]!;
     }
     this.#pushInside();
     // Those rigid shifts are corrections, not motion: carry previous positions
     // along so they don't turn into velocity and pump energy into the body.
-    const sx = this.figure.root.x - before.x;
-    const sy = this.figure.root.y - before.y;
+    const sx = this.figure.root.x - bx;
+    const sy = this.figure.root.y - by;
 
     // Project onto the solved pose. Otherwise previous positions stay put, so
     // next step's velocity is the motion the figure actually made.
     for (const p of parts) {
-      const w = p.node.worldPosition;
+      const w = p.node.worldMatrix;
       p.px += sx;
       p.py += sy;
-      p.x = w.x;
-      p.y = w.y;
+      p.x = w[4]!;
+      p.y = w[5]!;
     }
   }
 
@@ -205,12 +213,13 @@ export class Ragdoll {
     const { left, right, floor, ceiling } = this.bounds;
     let dx = 0;
     let dy = 0;
-    for (const node of this.figure.nodes) {
-      const w = node.worldPosition;
-      if (floor !== undefined && w.y + dy > floor) dy = floor - w.y;
-      if (ceiling !== undefined && w.y + dy < ceiling) dy = ceiling - w.y;
-      if (left !== undefined && w.x + dx < left) dx = left - w.x;
-      if (right !== undefined && w.x + dx > right) dx = right - w.x;
+    for (const p of this.#list) {
+      const w = p.node.worldMatrix;
+      const x = w[4]!, y = w[5]!;
+      if (floor !== undefined && y + dy > floor) dy = floor - y;
+      if (ceiling !== undefined && y + dy < ceiling) dy = ceiling - y;
+      if (left !== undefined && x + dx < left) dx = left - x;
+      if (right !== undefined && x + dx > right) dx = right - x;
     }
     if (dx || dy) {
       this.figure.root.x += dx;
@@ -224,9 +233,6 @@ export class Ragdoll {
     // The root has no parent, so its local position is its world position.
     root.x = rp.x;
     root.y = rp.y;
-    for (const node of root.walk()) {
-      if (!node.children.length) continue;
-      aimAt(node, node.children.map((c) => this.#parts.get(c)));
-    }
+    for (const a of this.#aims) aimAt(a.node, a.targets);
   }
 }

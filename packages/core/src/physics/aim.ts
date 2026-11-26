@@ -14,19 +14,21 @@ export const handedness = (node: Node): number => {
  * stubs, so a chest isn't twisted by a shoulder nudged a few pixels.
  * Children without a target are ignored. Limits apply via `turn`.
  */
-export function aimAt(node: Node, targets: (Vec2 | undefined)[]): void {
-  const p = node.worldPosition;
+export function aimAt(node: Node, targets: readonly (Vec2 | undefined)[]): void {
+  const m = node.worldMatrix;
+  const px = m[4]!, py = m[5]!;
+  const children = node.children;
   let cross = 0;
   let dot = 0;
-  node.children.forEach((child, i) => {
+  for (let i = 0; i < children.length; i++) {
     const t = targets[i];
-    if (!t) return;
-    const c = child.worldPosition;
-    const ax = c.x - p.x, ay = c.y - p.y;
-    const bx = t.x - p.x, by = t.y - p.y;
+    if (!t) continue;
+    const c = children[i]!.worldMatrix;
+    const ax = c[4]! - px, ay = c[5]! - py;
+    const bx = t.x - px, by = t.y - py;
     cross += ax * by - ay * bx;
     dot += ax * bx + ay * by;
-  });
+  }
   if (Math.hypot(cross, dot) < 1e-9) return;
   node.turn(Math.atan2(cross, dot) * handedness(node));
 }
