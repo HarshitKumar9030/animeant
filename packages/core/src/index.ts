@@ -5,3 +5,4 @@ export * from "./math/angle";
 export { Node, type NodeInit } from "./node";
 export { Figure, type Rig, type RigNode } from "./figure";
 export { humanoid } from "./rigs/humanoid";
+export { Ticker, type TickerOptions, type FixedCallback, type FrameCallback } from "./ticker";
