@@ -34,3 +34,21 @@ source of truth, and joint limits are a simple clamp after each adjustment.
 ## 008 — Limits live on the node, in radians, relative to rest
 `limits: [min, max]` on local rotation. Solvers and `constrain()` enforce them; the rig
 author decides which way an elbow bends.
+
+## 009 — Clips are plain JSON, keys are tuples
+`{ duration, loop, units, tracks: { node: { channel: [[t, v, ease?], ...] } } }`. Compact
+enough to hand-write, trivially serializable, compiled once to typed arrays and cached.
+
+## 010 — Blend within a layer by weighted average, across layers by lerp
+Sequential lerping makes a crossfade dip (the incoming clip swallows the outgoing one).
+Override clips on one layer are averaged by weight, then that result blends over the layers
+below by the layer's total weight (capped at 1). Additive clips add their delta from frame 0.
+
+## 011 — Root translation is always root motion
+Clip keys on the root's x/y are added to wherever the host placed the figure, never written
+absolutely. Hosts that move the root call `animator.rebase(figure.root)` each step.
+
+## 012 — Order of a simulation step
+Host placement → Animator → IK (blended over the animated pose by a per-drag weight) →
+Tweens. Each stage reads the previous stage's output, so IK can pin a hand on a dancing
+figure, and a tween (like reset) wins while the animator fades out.

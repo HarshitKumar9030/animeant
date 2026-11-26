@@ -13,7 +13,7 @@
       <header class="bar">
         <div class="brand">
           <span class="brand-name">animeant</span>
-          <span class="brand-tag">Nodal animation · IK playground</span>
+          <span class="brand-tag">Nodal animation playground</span>
         </div>
         <div class="bar-actions">
           <div class="segmented" id="mode" role="radiogroup" aria-label="Drag mode">
@@ -21,11 +21,6 @@
             <button type="button" role="radio" data-value="fk">FK</button>
             <button type="button" role="radio" data-value="ik">IK</button>
           </div>
-          <label class="toggle" data-cursor="pointer">
-            <input type="checkbox" id="sway" />
-            <span class="toggle-track"><span class="toggle-knob"></span></span>
-            <span class="toggle-label">Idle sway</span>
-          </label>
           <button class="btn" id="reset" type="button">
             <span class="btn-label">Reset pose</span>
           </button>
@@ -34,10 +29,36 @@
 
       <main class="stage">
         <canvas id="canvas" aria-label="Figure stage"></canvas>
-        <p class="hint" id="hint"><span class="hint-long" data-fk="Drag any joint. Its parent rotates, everything below follows." data-ik="Drag a hand, foot or head. The chain bends to follow.">Drag a hand, foot or head. The chain bends to follow.</span><span class="hint-short" data-fk="Drag any joint" data-ik="Drag a hand or foot">Drag a hand or foot</span></p>
+        <p class="hint" id="hint"><span class="hint-long" data-fk="Drag any joint. Its parent rotates, everything below follows." data-ik="Drag a hand, foot or head. Play a clip and IK layers on top.">Drag a hand, foot or head. Play a clip and IK layers on top.</span><span class="hint-short" data-fk="Drag any joint" data-ik="Drag a hand or foot">Drag a hand or foot</span></p>
         <div class="readout" id="readout" aria-live="polite">
           <span class="readout-name" id="readout-name">hips</span>
           <span class="readout-value" id="readout-value">0°</span>
+        </div>
+
+        <div class="transport" id="transport">
+          <button class="play" id="play" type="button" aria-label="Pause" data-state="playing">
+            <svg class="icon-pause" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="2.5" width="3" height="11" rx="1"/><rect x="9.5" y="2.5" width="3" height="11" rx="1"/></svg>
+            <svg class="icon-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.9v10.2a.9.9 0 0 0 1.37.77l8.1-5.1a.9.9 0 0 0 0-1.54l-8.1-5.1A.9.9 0 0 0 4.5 2.9Z"/></svg>
+          </button>
+          <div class="chips" id="clips" role="group" aria-label="Clips">
+            <button class="chip" type="button" data-clip="idle" aria-pressed="false">Idle</button>
+            <button class="chip" type="button" data-clip="jacks" aria-pressed="false">Jacks</button>
+            <button class="chip" type="button" data-clip="dance" aria-pressed="false">Dance</button>
+            <span class="chips-sep" aria-hidden="true"></span>
+            <button class="chip chip-layer" type="button" data-clip="wave" aria-pressed="false" title="Plays on a layer above">
+              <span class="chip-dot" aria-hidden="true"></span>Wave
+            </button>
+          </div>
+          <div class="scrub">
+            <input class="slider scrub-slider" id="scrub" type="range" min="0" max="1000" value="0" aria-label="Seek" disabled />
+            <span class="scrub-time" id="scrub-time">0.00s</span>
+          </div>
+          <div class="segmented segmented-sm" id="speed" role="radiogroup" aria-label="Speed">
+            <span class="segmented-pill"></span>
+            <button type="button" role="radio" data-value="0.5">½×</button>
+            <button type="button" role="radio" data-value="1">1×</button>
+            <button type="button" role="radio" data-value="2">2×</button>
+          </div>
         </div>
       </main>
 

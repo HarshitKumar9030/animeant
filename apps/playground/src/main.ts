@@ -1,6 +1,21 @@
-import { Figure, Ticker, humanoid, angleDelta, radToDeg, degToRad, type Chain, type Node, type Solver } from "@animeant/core";
+import {
+  Animator,
+  Figure,
+  Ticker,
+  Tweens,
+  angleDelta,
+  damp,
+  degToRad,
+  humanoid,
+  humanoidClips,
+  radToDeg,
+  type Chain,
+  type Clip,
+  type Node,
+  type Playback,
+  type Solver,
+} from "@animeant/core";
 import { CanvasRenderer } from "@animeant/canvas";
-import { approach, tween, type Tween } from "./tween";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -12,29 +27,27 @@ const hint = $<HTMLParagraphElement>("hint");
 const readoutName = $<HTMLSpanElement>("readout-name");
 const readoutValue = $<HTMLSpanElement>("readout-value");
 const resetBtn = $<HTMLButtonElement>("reset");
-const swayInput = $<HTMLInputElement>("sway");
 const panel = $<HTMLElement>("panel");
 const handle = $<HTMLButtonElement>("panel-handle");
-const modeEl = $<HTMLDivElement>("mode");
-const solverEl = $<HTMLDivElement>("solver");
 const solverRow = $<HTMLDivElement>("solver-row");
+const transport = $<HTMLDivElement>("transport");
+const playBtn = $<HTMLButtonElement>("play");
+const scrub = $<HTMLInputElement>("scrub");
+const scrubTime = $<HTMLSpanElement>("scrub-time");
 $<HTMLSpanElement>("count").textContent = String(humanoid.nodes.length);
 
 const figure = Figure.fromRig(humanoid);
 const renderer = new CanvasRenderer(canvas);
+const animator = new Animator(figure);
+const tweens = new Tweens();
+const ticker = new Ticker({ fixedStep: 1 / 120 });
 
 // ---------- Theme ----------
 
 const readTheme = () => {
   const s = getComputedStyle(document.documentElement);
   const v = (name: string) => s.getPropertyValue(name).trim();
-  renderer.theme = {
-    bone: v("--bone"),
-    joint: v("--bone"),
-    head: v("--bone"),
-    root: v("--root"),
-    accent: v("--accent"),
-  };
+  renderer.theme = { bone: v("--bone"), joint: v("--bone"), head: v("--bone"), root: v("--root"), accent: v("--accent") };
 };
 readTheme();
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readTheme);
@@ -42,26 +55,29 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readTheme)
 // ---------- Layout ----------
 
 let figureScale = 1;
-let offset = { x: 0, y: 0 }; // user drag of the root, in stage px
-// Where the figure sits; eased so it glides when the mobile sheet opens.
+/** User drag of the root, in stage px. An object so it can be tweened. */
+const offset = { x: 0, y: 0 };
+/** Where the figure sits; eased so it glides when the mobile sheet opens. */
 const frameBox = { cy: 0, scale: 1 };
 const frameTarget = { cy: 0, scale: 1 };
 
-/** The part of the stage not covered by the bottom sheet. */
+/** The part of the stage not covered by the transport or the bottom sheet. */
 const visibleHeight = () => {
-  const h = renderer.height;
-  if (!panel.classList.contains("is-open") || getComputedStyle(panel).position !== "fixed") return h;
-  const stageTop = stage.getBoundingClientRect().top;
-  const sheetTop = window.innerHeight - panel.offsetHeight;
-  return Math.max(160, Math.min(h, sheetTop - stageTop - 8));
+  let h = renderer.height - transport.offsetHeight - 12;
+  if (panel.classList.contains("is-open") && getComputedStyle(panel).position === "fixed") {
+    const stageTop = stage.getBoundingClientRect().top;
+    const sheetTop = window.innerHeight - panel.offsetHeight;
+    h = Math.min(h, sheetTop - stageTop - 8);
+  }
+  return Math.max(160, h);
 };
 
 const computeFrame = () => {
-  const w = renderer.width;
   const vh = visibleHeight();
-  // The rest pose spans ~160px above the hips and ~114px below at scale 1.
-  frameTarget.scale = Math.max(0.4, Math.min(1.7, Math.min(w / 380, (vh - 48) / 300)));
-  frameTarget.cy = vh / 2 + 23 * frameTarget.scale;
+  // Rest pose spans ~160px above the hips and ~118px below at scale 1, plus room for jumps.
+  frameTarget.scale = Math.max(0.4, Math.min(1.6, Math.min(renderer.width / 380, (vh - 64) / 300)));
+  frameTarget.cy = vh / 2 + 30 * frameTarget.scale;
+  stage.style.setProperty("--transport-h", `${transport.offsetHeight}px`);
 };
 
 const placeRoot = () => {
@@ -79,73 +95,12 @@ const layout = () => {
 };
 new ResizeObserver(layout).observe(stage);
 
-// ---------- State ----------
+// ---------- Selection & node list ----------
 
 let selected: Node = figure.root;
 let hovered: Node | null = null;
 let focusAmt = 1;
 let hoverAmt = 0;
-let dragging: { node: Node; pointerId: number; grab: { x: number; y: number } } | null = null;
-let resetTween: Tween | null = null;
-const swayOffsets = new Map<string, number>();
-
-// ---------- Mode: FK rotates parents, IK solves chains ----------
-
-type Mode = "fk" | "ik";
-let mode: Mode = "ik";
-let solver: Solver = "fabrik";
-let effectorAmt = 1;
-
-const chains = new Map<Node, Chain>([
-  [figure.node("handL"), figure.chain("handL")],
-  [figure.node("handR"), figure.chain("handR")],
-  [figure.node("footL"), figure.chain("footL")],
-  [figure.node("footR"), figure.chain("footR")],
-  [figure.node("head"), figure.chain(["spine", "neck", "head"])],
-]);
-const effectors = [...chains.keys()];
-
-/** The live IK drag: the pointer is the goal; the solved target trails it softly. */
-type IKDrag = { chain: Chain; goal: { x: number; y: number }; pos: { x: number; y: number }; reached: boolean; released: boolean };
-let ik: IKDrag | null = null;
-/** Released drags still gliding to where they were let go. */
-let settling: IKDrag[] = [];
-let targetAmt = 0;
-let lastTarget = { x: 0, y: 0, reached: true };
-
-/** A segmented control whose pill slides to the checked option. */
-function segmented<T extends string>(root: HTMLElement, initial: T, onChange: (v: T) => void) {
-  const pill = root.querySelector<HTMLSpanElement>(".segmented-pill")!;
-  const buttons = [...root.querySelectorAll<HTMLButtonElement>("button")];
-  const set = (value: T, notify: boolean) => {
-    for (const b of buttons) {
-      const on = b.dataset.value === value;
-      b.setAttribute("aria-checked", String(on));
-      if (on) {
-        pill.style.width = `${b.offsetWidth}px`;
-        pill.style.transform = `translateX(${b.offsetLeft}px)`;
-      }
-    }
-    if (notify) onChange(value);
-  };
-  buttons.forEach((b) => b.addEventListener("click", () => set(b.dataset.value as T, true)));
-  const sync = () => set((buttons.find((b) => b.getAttribute("aria-checked") === "true")?.dataset.value ?? initial) as T, false);
-  new ResizeObserver(sync).observe(root);
-  set(initial, false);
-}
-
-const setHint = () => {
-  for (const el of hint.querySelectorAll<HTMLElement>("[data-fk]")) el.textContent = el.dataset[mode] ?? "";
-};
-
-segmented<Mode>(modeEl, mode, (v) => {
-  mode = v;
-  solverRow.classList.toggle("is-hidden", mode !== "ik");
-  setHint();
-});
-segmented<Solver>(solverEl, solver, (v) => (solver = v));
-
-// ---------- Node list ----------
 
 const depthOf = (n: Node) => {
   let d = 0;
@@ -174,8 +129,8 @@ figure.nodes.forEach((node, i) => {
     slider.max = String(Math.round(radToDeg(node.limits[1])));
   }
   slider.addEventListener("input", () => {
-    resetTween = null;
-    node.rotation = degToRad(Number(slider.value)) + (swayOffsets.get(node.name) ?? 0);
+    tweens.kill(node);
+    node.rotation = degToRad(Number(slider.value));
     select(node);
   });
   li.addEventListener("pointerdown", () => select(node));
@@ -200,7 +155,6 @@ function select(node: Node) {
   row.li.classList.add("is-selected");
   moveHighlight();
   row.li.scrollIntoView({ block: "nearest", behavior: "smooth" });
-
   readoutName.classList.add("is-swapping");
   setTimeout(() => {
     readoutName.textContent = node.name;
@@ -212,7 +166,168 @@ rows.get(selected)!.li.classList.add("is-selected");
 requestAnimationFrame(moveHighlight);
 window.addEventListener("resize", moveHighlight);
 
+// ---------- Segmented controls ----------
+
+/** A segmented control whose pill slides to the checked option. */
+function segmented<T extends string>(root: HTMLElement, initial: T, onChange: (v: T) => void) {
+  const pill = root.querySelector<HTMLSpanElement>(".segmented-pill")!;
+  const buttons = [...root.querySelectorAll<HTMLButtonElement>("button")];
+  const set = (value: T, notify: boolean) => {
+    for (const b of buttons) {
+      const on = b.dataset.value === value;
+      b.setAttribute("aria-checked", String(on));
+      if (on) {
+        pill.style.width = `${b.offsetWidth}px`;
+        pill.style.transform = `translateX(${b.offsetLeft}px)`;
+      }
+    }
+    if (notify) onChange(value);
+  };
+  buttons.forEach((b) => b.addEventListener("click", () => set(b.dataset.value as T, true)));
+  const sync = () =>
+    set((buttons.find((b) => b.getAttribute("aria-checked") === "true")?.dataset.value ?? initial) as T, false);
+  new ResizeObserver(sync).observe(root);
+  set(initial, false);
+}
+
+type Mode = "fk" | "ik";
+let mode: Mode = "ik";
+let solver: Solver = "fabrik";
+let speed = 1;
+
+const setHint = () => {
+  for (const el of hint.querySelectorAll<HTMLElement>("[data-fk]")) el.textContent = el.dataset[mode] ?? "";
+};
+
+segmented<Mode>($("mode"), mode, (v) => {
+  mode = v;
+  solverRow.classList.toggle("is-hidden", mode !== "ik");
+  setHint();
+});
+segmented<Solver>($("solver"), solver, (v) => (solver = v));
+segmented<"0.5" | "1" | "2">($("speed"), "1", (v) => {
+  speed = Number(v);
+  for (const pb of animator.playbacks) pb.speed = speed;
+});
+
+// ---------- Clips ----------
+
+const clipFor = (name: string) => humanoidClips[name as keyof typeof humanoidClips] as Clip;
+const chips = [...document.querySelectorAll<HTMLButtonElement>(".chip")];
+/** The current clip on each layer: 0 = body clips, 1 = wave. */
+const current = new Map<number, Playback>();
+let paused = false;
+
+const syncChips = () => {
+  for (const chip of chips) {
+    const layer = chip.dataset.clip === "wave" ? 1 : 0;
+    const pb = current.get(layer);
+    chip.setAttribute("aria-pressed", String(!!pb && !pb.stopping && pb.clip.name === chip.dataset.clip));
+  }
+  const base = current.get(0) ?? current.get(1);
+  const live = !!base && !base.stopping;
+  scrub.disabled = !live;
+  playBtn.disabled = !live;
+};
+
+const setPaused = (p: boolean) => {
+  paused = p;
+  for (const pb of animator.playbacks) p ? pb.pause() : pb.resume();
+  playBtn.dataset.state = p ? "paused" : "playing";
+  playBtn.setAttribute("aria-label", p ? "Play" : "Pause");
+};
+
+for (const chip of chips) {
+  chip.addEventListener("click", () => {
+    const name = chip.dataset.clip!;
+    const layer = name === "wave" ? 1 : 0;
+    const pb = current.get(layer);
+    if (pb && !pb.stopping && pb.clip.name === name) {
+      pb.stop(0.45);
+      current.delete(layer);
+    } else {
+      tweens.kill(offset);
+      for (const n of figure.nodes) tweens.kill(n);
+      current.set(layer, animator.play(clipFor(name), { layer, fade: 0.45, speed }));
+      if (paused) setPaused(false);
+    }
+    hint.classList.add("is-gone");
+    syncChips();
+  });
+}
+
+playBtn.addEventListener("click", () => setPaused(!paused));
+
+scrub.addEventListener("input", () => {
+  const pb = current.get(0) ?? current.get(1);
+  if (!pb) return;
+  if (!paused) setPaused(true);
+  const phase = Number(scrub.value) / 1000;
+  // Seek every live clip to the same phase so layers stay in step.
+  for (const other of animator.playbacks) other.seek(phase * other.duration);
+});
+
+syncChips();
+
+// ---------- IK chains ----------
+
+const chains = new Map<Node, Chain>([
+  [figure.node("handL"), figure.chain("handL")],
+  [figure.node("handR"), figure.chain("handR")],
+  [figure.node("footL"), figure.chain("footL")],
+  [figure.node("footR"), figure.chain("footR")],
+  [figure.node("head"), figure.chain(["spine", "neck", "head"])],
+]);
+const effectors = [...chains.keys()];
+
+/**
+ * A live IK drag. The pointer is the goal; `pos` trails it softly. `weight`
+ * blends the solve over whatever animation is playing: 1 while held, easing
+ * back to 0 after release so the clip takes the limb back.
+ */
+type IKDrag = {
+  chain: Chain;
+  goal: { x: number; y: number };
+  pos: { x: number; y: number };
+  reached: boolean;
+  released: boolean;
+  weight: number;
+};
+let ik: IKDrag | null = null;
+let settling: IKDrag[] = [];
+let effectorAmt = 1;
+let targetAmt = 0;
+let lastTarget = { x: 0, y: 0, reached: true };
+
+/** Returns false when the drag is finished. */
+const stepDrag = (d: IKDrag, step: number): boolean => {
+  d.pos.x = damp(d.pos.x, d.goal.x, 22, step);
+  d.pos.y = damp(d.pos.y, d.goal.y, 22, step);
+
+  const animating = animator.active;
+  if (d.released && animating) d.weight = damp(d.weight, 0, 5, step);
+
+  const before = animating ? d.chain.joints.map((j) => j.rotation) : null;
+  d.chain.solve(d.pos, { solver, iterations: 10, tolerance: 0.25 });
+  if (before) {
+    d.chain.joints.forEach((j, i) => {
+      const anim = before[i]!;
+      j.rotation = anim + angleDelta(anim, j.rotation) * d.weight;
+    });
+  }
+
+  // Dashed ring only when the goal is truly out of reach, not while catching up.
+  const b = d.chain.base.worldPosition;
+  d.reached = Math.hypot(d.goal.x - b.x, d.goal.y - b.y) <= d.chain.reach + 1;
+
+  if (!d.released) return true;
+  if (animating) return d.weight > 0.01;
+  return Math.hypot(d.goal.x - d.pos.x, d.goal.y - d.pos.y) > 0.3;
+};
+
 // ---------- Pointer ----------
+
+let dragging: { node: Node; pointerId: number; grab: { x: number; y: number } } | null = null;
 
 const toStage = (e: PointerEvent) => {
   const r = canvas.getBoundingClientRect();
@@ -236,18 +351,18 @@ canvas.addEventListener("pointermove", (e) => {
   if (dragging && e.pointerId === dragging.pointerId) {
     const node = dragging.node;
     if (node === figure.root) {
-      offset = { x: p.x - dragging.grab.x - renderer.width / 2, y: p.y - dragging.grab.y - frameBox.cy };
-      placeRoot();
+      offset.x = p.x - dragging.grab.x - renderer.width / 2;
+      offset.y = p.y - dragging.grab.y - frameBox.cy;
     } else if (ik) {
       ik.goal = { x: p.x - dragging.grab.x, y: p.y - dragging.grab.y };
     } else {
-      // Rotate the parent so this joint points at the pointer.
+      // FK: rotate the parent so this joint points at the pointer.
       const parent = node.parent!;
       const pivot = parent.worldPosition;
       const joint = node.worldPosition;
-      const current = Math.atan2(joint.y - pivot.y, joint.x - pivot.x);
-      const wanted = Math.atan2(p.y - pivot.y, p.x - pivot.x);
-      parent.rotation += angleDelta(current, wanted);
+      const cur = Math.atan2(joint.y - pivot.y, joint.x - pivot.x);
+      const want = Math.atan2(p.y - pivot.y, p.x - pivot.x);
+      parent.rotation += angleDelta(cur, want);
       parent.constrain();
     }
     return;
@@ -261,14 +376,17 @@ canvas.addEventListener("pointerdown", (e) => {
   const p = toStage(e);
   const hit = hitTest(p);
   if (!hit) return;
-  canvas.setPointerCapture(e.pointerId);
-  resetTween = null;
+  try { canvas.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
   const w = hit.worldPosition;
   dragging = { node: hit, pointerId: e.pointerId, grab: { x: p.x - w.x, y: p.y - w.y } };
+  tweens.kill(offset);
+  for (const n of figure.nodes) tweens.kill(n);
+
   const chain = mode === "ik" ? chains.get(hit) : undefined;
   if (ik?.released) settling.push(ik);
   settling = settling.filter((d) => d.chain !== chain);
-  ik = chain ? { chain, goal: { ...w }, pos: { ...w }, reached: true, released: false } : null;
+  ik = chain ? { chain, goal: { ...w }, pos: { ...w }, reached: true, released: false, weight: 1 } : null;
+
   select(hit === figure.root ? hit : hit.parent ?? hit);
   canvas.style.cursor = "grabbing";
   hint.classList.add("is-gone");
@@ -277,7 +395,7 @@ canvas.addEventListener("pointerdown", (e) => {
 const endDrag = (e: PointerEvent) => {
   if (!dragging || e.pointerId !== dragging.pointerId) return;
   dragging = null;
-  // Let the trailing target finish its glide to where the pointer let go.
+  // Let the trailing target finish its glide, or hand the limb back to the clip.
   if (ik) ik.released = true;
   canvas.style.cursor = hovered ? "grab" : "default";
 };
@@ -290,15 +408,15 @@ canvas.addEventListener("pointerleave", () => { if (!dragging) hovered = null; }
 resetBtn.addEventListener("click", () => {
   ik = null;
   settling = [];
-  const nodes = figure.nodes;
-  const from = [...nodes.map((n) => n.rotation - (swayOffsets.get(n.name) ?? 0)), offset.x, offset.y];
-  const to = from.map(() => 0);
-  // Unwind each joint the short way round.
-  for (let i = 0; i < nodes.length; i++) from[i] = angleDelta(0, from[i]!);
-  resetTween = tween(from, to, 700, (v) => {
-    nodes.forEach((n, i) => { n.rotation = v[i]! + (swayOffsets.get(n.name) ?? 0); });
-    offset = { x: v[nodes.length]!, y: v[nodes.length + 1]! };
+  animator.stop(undefined, 0.3);
+  current.clear();
+  setPaused(false);
+  syncChips();
+  // Tweens write after the animator each step, so they win while it fades.
+  figure.nodes.forEach((n, i) => {
+    tweens.to(n, { rotation: 0 }, { duration: 0.7, delay: i * 0.012, ease: "outQuint" });
   });
+  tweens.to(offset, { x: 0, y: 0 }, { duration: 0.7, ease: "outQuint" });
   resetBtn.classList.add("is-pulsing");
   setTimeout(() => resetBtn.classList.remove("is-pulsing"), 200);
 });
@@ -309,68 +427,36 @@ handle.addEventListener("click", () => {
   setTimeout(moveHighlight, 30);
 });
 
-// ---------- Sway (additive, so it composes with dragging) ----------
-
-const swayPlan: [string, number, number, number][] = [
-  // node, amplitude (rad), speed, phase
-  ["spine", 0.05, 1.3, 0],
-  ["neck", 0.06, 1.3, 0.6],
-  ["shoulderL", 0.12, 1.3, 1.2],
-  ["shoulderR", 0.12, 1.3, 1.2 + Math.PI],
-  ["elbowL", 0.1, 1.3, 1.8],
-  ["elbowR", 0.1, 1.3, 1.8 + Math.PI],
-];
-let swayWeight = 0;
-
-const applySway = (time: number, dt: number) => {
-  swayWeight = approach(swayWeight, swayInput.checked ? 1 : 0, dt, 4);
-  for (const [name, amp, speed, phase] of swayPlan) {
-    const next = Math.sin(time * speed + phase) * amp * swayWeight;
-    const prev = swayOffsets.get(name) ?? 0;
-    figure.node(name).rotation += next - prev;
-    swayOffsets.set(name, next);
-  }
-};
-
 // ---------- Loop ----------
 
-const ticker = new Ticker({ fixedStep: 1 / 120 });
-
-// Simulation: soft-follow the pointer and solve IK at a fixed rate.
-const stepDrag = (d: IKDrag, step: number): boolean => {
-  d.pos.x = approach(d.pos.x, d.goal.x, step, 22);
-  d.pos.y = approach(d.pos.y, d.goal.y, step, 22);
-  d.chain.solve(d.pos, { solver, iterations: 10, tolerance: 0.25 });
-  // Dashed ring only when the goal is truly out of reach, not while catching up.
-  const b = d.chain.base.worldPosition;
-  d.reached = Math.hypot(d.goal.x - b.x, d.goal.y - b.y) <= d.chain.reach + 1;
-  return !(d.released && Math.hypot(d.goal.x - d.pos.x, d.goal.y - d.pos.y) < 0.3);
-};
-
+// Simulation: host placement → animation → IK on top → tweens, at a fixed rate.
 ticker.onFixed((step) => {
+  placeRoot();
+  animator.rebase(figure.root);
+  animator.update(step);
   settling = settling.filter((d) => stepDrag(d, step));
-  if (!ik) return;
-  const alive = stepDrag(ik, step);
-  lastTarget = { x: ik.goal.x, y: ik.goal.y, reached: ik.reached };
-  if (!alive) ik = null;
+  if (ik) {
+    const alive = stepDrag(ik, step);
+    lastTarget = { x: ik.goal.x, y: ik.goal.y, reached: ik.reached };
+    if (!alive) ik = null;
+  }
+  tweens.update(step);
+  for (const [layer, pb] of current) if (pb.dead) current.delete(layer);
 });
 
 ticker.onFrame((rawDt) => {
   const dt = Math.min(0.05, rawDt);
-  const now = ticker.time;
 
-  if (resetTween && !resetTween.update(performance.now())) resetTween = null;
-  frameBox.cy = approach(frameBox.cy, frameTarget.cy, dt, 7);
-  frameBox.scale = approach(frameBox.scale, frameTarget.scale, dt, 7);
-  placeRoot();
-  applySway(now, dt);
+  frameBox.cy = damp(frameBox.cy, frameTarget.cy, 7, dt);
+  frameBox.scale = damp(frameBox.scale, frameTarget.scale, 7, dt);
 
-  focusAmt = approach(focusAmt, 1, dt, 12);
-  hoverAmt = approach(hoverAmt, hovered && hovered !== selected ? 1 : 0, dt, 16);
-  effectorAmt = approach(effectorAmt, mode === "ik" && !dragging ? 1 : 0, dt, 10);
-  targetAmt = approach(targetAmt, ik && !ik.released ? 1 : 0, dt, ik && !ik.released ? 18 : 8);
+  focusAmt = damp(focusAmt, 1, 12, dt);
+  hoverAmt = damp(hoverAmt, hovered && hovered !== selected ? 1 : 0, 16, dt);
+  effectorAmt = damp(effectorAmt, mode === "ik" && !dragging ? 1 : 0, 10, dt);
+  const holding = !!ik && !ik.released;
+  targetAmt = damp(targetAmt, holding ? 1 : 0, holding ? 18 : 8, dt);
 
-  const scaleK = Math.min(1.3, Math.max(0.8, figureScale));
+  const k = Math.min(1.3, Math.max(0.8, figureScale));
   renderer.clear();
   renderer.draw(figure, {
     focus: { node: selected, amount: focusAmt },
@@ -378,23 +464,30 @@ ticker.onFrame((rawDt) => {
     effectors: { nodes: effectors, amount: effectorAmt },
     target: { ...lastTarget, amount: targetAmt },
     limits: { node: selected, amount: focusAmt * (selected.limits ? 1 : 0) },
-    boneWidth: 3.5 * scaleK,
-    jointRadius: 4.5 * scaleK,
+    boneWidth: 3.5 * k,
+    jointRadius: 4.5 * k,
     headRadius: 16 * figureScale,
   });
 
   for (const [node, row] of rows) {
-    const deg = Math.round(radToDeg(angleDelta(0, node.rotation - (swayOffsets.get(node.name) ?? 0))));
-    if (deg !== row.last) {
-      row.last = deg;
-      row.value.textContent = `${deg}°`;
-      if (document.activeElement !== row.slider) row.slider.value = String(deg);
-      const lo = Number(row.slider.min), hi = Number(row.slider.max);
-      row.slider.style.setProperty("--p", `${((deg - lo) / (hi - lo)) * 100}%`);
-      row.slider.style.setProperty("--z", `${((0 - lo) / (hi - lo)) * 100}%`);
-    }
+    const deg = Math.round(radToDeg(angleDelta(0, node.rotation)));
+    if (deg === row.last) continue;
+    row.last = deg;
+    row.value.textContent = `${deg}°`;
+    if (document.activeElement !== row.slider) row.slider.value = String(deg);
+    const lo = Number(row.slider.min), hi = Number(row.slider.max);
+    row.slider.style.setProperty("--p", `${((deg - lo) / (hi - lo)) * 100}%`);
+    row.slider.style.setProperty("--z", `${((0 - lo) / (hi - lo)) * 100}%`);
   }
   readoutValue.textContent = rows.get(selected)!.value.textContent;
+
+  const pb = current.get(0) ?? current.get(1);
+  if (pb) {
+    if (document.activeElement !== scrub || !paused) scrub.value = String(Math.round(pb.progress * 1000));
+    scrub.style.setProperty("--p", `${pb.progress * 100}%`);
+    scrubTime.textContent = `${pb.localTime.toFixed(2)}s`;
+  }
+  if (!pb && !scrub.disabled) syncChips();
 });
 
 layout();
