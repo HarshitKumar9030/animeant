@@ -1,3 +1,4 @@
+import { Chain } from "./ik/chain";
 import { Node } from "./node";
 
 export interface RigNode {
@@ -69,6 +70,24 @@ export class Figure {
   /** Parent→child pairs, i.e. the bones to draw. */
   *bones(): Generator<[Node, Node]> {
     for (const n of this.root.walk()) for (const c of n.children) yield [n, c];
+  }
+
+  /**
+   * A chain ending at `end`, reaching `links` bones up toward the root.
+   * `figure.chain("handR")` gives shoulderR → elbowR → handR.
+   * Or pass explicit names, base first.
+   */
+  chain(end: string, links?: number): Chain;
+  chain(names: string[]): Chain;
+  chain(arg: string | string[], links = 2): Chain {
+    if (Array.isArray(arg)) return new Chain(arg.map((n) => this.node(n)));
+    const joints: Node[] = [this.node(arg)];
+    for (let i = 0; i < links; i++) {
+      const p = joints[0]!.parent;
+      if (!p) break;
+      joints.unshift(p);
+    }
+    return new Chain(joints);
   }
 
   /** Snapshot local rotations, handy for resetting poses. */
