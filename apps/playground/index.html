@@ -13,9 +13,14 @@
       <header class="bar">
         <div class="brand">
           <span class="brand-name">animeant</span>
-          <span class="brand-tag">Phase 1 · Forward kinematics</span>
+          <span class="brand-tag">Nodal animation · IK playground</span>
         </div>
         <div class="bar-actions">
+          <div class="segmented" id="mode" role="radiogroup" aria-label="Drag mode">
+            <span class="segmented-pill"></span>
+            <button type="button" role="radio" data-value="fk">FK</button>
+            <button type="button" role="radio" data-value="ik">IK</button>
+          </div>
           <label class="toggle" data-cursor="pointer">
             <input type="checkbox" id="sway" />
             <span class="toggle-track"><span class="toggle-knob"></span></span>
@@ -29,7 +34,7 @@
 
       <main class="stage">
         <canvas id="canvas" aria-label="Figure stage"></canvas>
-        <p class="hint" id="hint"><span class="hint-long">Drag any joint. Its parent rotates, everything below follows.</span><span class="hint-short">Drag any joint</span></p>
+        <p class="hint" id="hint"><span class="hint-long" data-fk="Drag any joint. Its parent rotates, everything below follows." data-ik="Drag a hand, foot or head. The chain bends to follow.">Drag a hand, foot or head. The chain bends to follow.</span><span class="hint-short" data-fk="Drag any joint" data-ik="Drag a hand or foot">Drag a hand or foot</span></p>
         <div class="readout" id="readout" aria-live="polite">
           <span class="readout-name" id="readout-name">hips</span>
           <span class="readout-value" id="readout-value">0°</span>
@@ -43,6 +48,14 @@
         <div class="panel-head">
           <span class="panel-title">Nodes</span>
           <span class="panel-count" id="count"></span>
+        </div>
+        <div class="panel-row" id="solver-row">
+          <span class="panel-label">Solver</span>
+          <div class="segmented segmented-sm" id="solver" role="radiogroup" aria-label="IK solver">
+            <span class="segmented-pill"></span>
+            <button type="button" role="radio" data-value="fabrik">FABRIK</button>
+            <button type="button" role="radio" data-value="ccd">CCD</button>
+          </div>
         </div>
         <ul class="nodes" id="nodes">
           <span class="nodes-highlight" id="highlight"></span>

@@ -1,4 +1,4 @@
-import { Figure, humanoid, angleDelta, radToDeg, degToRad, type Node } from "@animeant/core";
+import { Figure, Ticker, humanoid, angleDelta, radToDeg, degToRad, type Chain, type Node, type Solver } from "@animeant/core";
 import { CanvasRenderer } from "@animeant/canvas";
 import { approach, tween, type Tween } from "./tween";
 
@@ -15,6 +15,9 @@ const resetBtn = $<HTMLButtonElement>("reset");
 const swayInput = $<HTMLInputElement>("sway");
 const panel = $<HTMLElement>("panel");
 const handle = $<HTMLButtonElement>("panel-handle");
+const modeEl = $<HTMLDivElement>("mode");
+const solverEl = $<HTMLDivElement>("solver");
+const solverRow = $<HTMLDivElement>("solver-row");
 $<HTMLSpanElement>("count").textContent = String(humanoid.nodes.length);
 
 const figure = Figure.fromRig(humanoid);
@@ -86,6 +89,62 @@ let dragging: { node: Node; pointerId: number; grab: { x: number; y: number } } 
 let resetTween: Tween | null = null;
 const swayOffsets = new Map<string, number>();
 
+// ---------- Mode: FK rotates parents, IK solves chains ----------
+
+type Mode = "fk" | "ik";
+let mode: Mode = "ik";
+let solver: Solver = "fabrik";
+let effectorAmt = 1;
+
+const chains = new Map<Node, Chain>([
+  [figure.node("handL"), figure.chain("handL")],
+  [figure.node("handR"), figure.chain("handR")],
+  [figure.node("footL"), figure.chain("footL")],
+  [figure.node("footR"), figure.chain("footR")],
+  [figure.node("head"), figure.chain(["spine", "neck", "head"])],
+]);
+const effectors = [...chains.keys()];
+
+/** The live IK drag: the pointer is the goal; the solved target trails it softly. */
+type IKDrag = { chain: Chain; goal: { x: number; y: number }; pos: { x: number; y: number }; reached: boolean; released: boolean };
+let ik: IKDrag | null = null;
+/** Released drags still gliding to where they were let go. */
+let settling: IKDrag[] = [];
+let targetAmt = 0;
+let lastTarget = { x: 0, y: 0, reached: true };
+
+/** A segmented control whose pill slides to the checked option. */
+function segmented<T extends string>(root: HTMLElement, initial: T, onChange: (v: T) => void) {
+  const pill = root.querySelector<HTMLSpanElement>(".segmented-pill")!;
+  const buttons = [...root.querySelectorAll<HTMLButtonElement>("button")];
+  const set = (value: T, notify: boolean) => {
+    for (const b of buttons) {
+      const on = b.dataset.value === value;
+      b.setAttribute("aria-checked", String(on));
+      if (on) {
+        pill.style.width = `${b.offsetWidth}px`;
+        pill.style.transform = `translateX(${b.offsetLeft}px)`;
+      }
+    }
+    if (notify) onChange(value);
+  };
+  buttons.forEach((b) => b.addEventListener("click", () => set(b.dataset.value as T, true)));
+  const sync = () => set((buttons.find((b) => b.getAttribute("aria-checked") === "true")?.dataset.value ?? initial) as T, false);
+  new ResizeObserver(sync).observe(root);
+  set(initial, false);
+}
+
+const setHint = () => {
+  for (const el of hint.querySelectorAll<HTMLElement>("[data-fk]")) el.textContent = el.dataset[mode] ?? "";
+};
+
+segmented<Mode>(modeEl, mode, (v) => {
+  mode = v;
+  solverRow.classList.toggle("is-hidden", mode !== "ik");
+  setHint();
+});
+segmented<Solver>(solverEl, solver, (v) => (solver = v));
+
 // ---------- Node list ----------
 
 const depthOf = (n: Node) => {
@@ -110,6 +169,10 @@ figure.nodes.forEach((node, i) => {
   `;
   const value = li.querySelector<HTMLSpanElement>(".node-value")!;
   const slider = li.querySelector<HTMLInputElement>(".slider")!;
+  if (node.limits) {
+    slider.min = String(Math.round(radToDeg(node.limits[0])));
+    slider.max = String(Math.round(radToDeg(node.limits[1])));
+  }
   slider.addEventListener("input", () => {
     resetTween = null;
     node.rotation = degToRad(Number(slider.value)) + (swayOffsets.get(node.name) ?? 0);
@@ -175,6 +238,8 @@ canvas.addEventListener("pointermove", (e) => {
     if (node === figure.root) {
       offset = { x: p.x - dragging.grab.x - renderer.width / 2, y: p.y - dragging.grab.y - frameBox.cy };
       placeRoot();
+    } else if (ik) {
+      ik.goal = { x: p.x - dragging.grab.x, y: p.y - dragging.grab.y };
     } else {
       // Rotate the parent so this joint points at the pointer.
       const parent = node.parent!;
@@ -183,6 +248,7 @@ canvas.addEventListener("pointermove", (e) => {
       const current = Math.atan2(joint.y - pivot.y, joint.x - pivot.x);
       const wanted = Math.atan2(p.y - pivot.y, p.x - pivot.x);
       parent.rotation += angleDelta(current, wanted);
+      parent.constrain();
     }
     return;
   }
@@ -199,6 +265,10 @@ canvas.addEventListener("pointerdown", (e) => {
   resetTween = null;
   const w = hit.worldPosition;
   dragging = { node: hit, pointerId: e.pointerId, grab: { x: p.x - w.x, y: p.y - w.y } };
+  const chain = mode === "ik" ? chains.get(hit) : undefined;
+  if (ik?.released) settling.push(ik);
+  settling = settling.filter((d) => d.chain !== chain);
+  ik = chain ? { chain, goal: { ...w }, pos: { ...w }, reached: true, released: false } : null;
   select(hit === figure.root ? hit : hit.parent ?? hit);
   canvas.style.cursor = "grabbing";
   hint.classList.add("is-gone");
@@ -207,6 +277,8 @@ canvas.addEventListener("pointerdown", (e) => {
 const endDrag = (e: PointerEvent) => {
   if (!dragging || e.pointerId !== dragging.pointerId) return;
   dragging = null;
+  // Let the trailing target finish its glide to where the pointer let go.
+  if (ik) ik.released = true;
   canvas.style.cursor = hovered ? "grab" : "default";
 };
 canvas.addEventListener("pointerup", endDrag);
@@ -216,6 +288,8 @@ canvas.addEventListener("pointerleave", () => { if (!dragging) hovered = null; }
 // ---------- Controls ----------
 
 resetBtn.addEventListener("click", () => {
+  ik = null;
+  settling = [];
   const nodes = figure.nodes;
   const from = [...nodes.map((n) => n.rotation - (swayOffsets.get(n.name) ?? 0)), offset.x, offset.y];
   const to = from.map(() => 0);
@@ -260,26 +334,52 @@ const applySway = (time: number, dt: number) => {
 
 // ---------- Loop ----------
 
-let last = performance.now();
-const frame = (now: number) => {
-  const dt = Math.min(0.05, (now - last) / 1000);
-  last = now;
+const ticker = new Ticker({ fixedStep: 1 / 120 });
 
-  if (resetTween && !resetTween.update(now)) resetTween = null;
+// Simulation: soft-follow the pointer and solve IK at a fixed rate.
+const stepDrag = (d: IKDrag, step: number): boolean => {
+  d.pos.x = approach(d.pos.x, d.goal.x, step, 22);
+  d.pos.y = approach(d.pos.y, d.goal.y, step, 22);
+  d.chain.solve(d.pos, { solver, iterations: 10, tolerance: 0.25 });
+  // Dashed ring only when the goal is truly out of reach, not while catching up.
+  const b = d.chain.base.worldPosition;
+  d.reached = Math.hypot(d.goal.x - b.x, d.goal.y - b.y) <= d.chain.reach + 1;
+  return !(d.released && Math.hypot(d.goal.x - d.pos.x, d.goal.y - d.pos.y) < 0.3);
+};
+
+ticker.onFixed((step) => {
+  settling = settling.filter((d) => stepDrag(d, step));
+  if (!ik) return;
+  const alive = stepDrag(ik, step);
+  lastTarget = { x: ik.goal.x, y: ik.goal.y, reached: ik.reached };
+  if (!alive) ik = null;
+});
+
+ticker.onFrame((rawDt) => {
+  const dt = Math.min(0.05, rawDt);
+  const now = ticker.time;
+
+  if (resetTween && !resetTween.update(performance.now())) resetTween = null;
   frameBox.cy = approach(frameBox.cy, frameTarget.cy, dt, 7);
   frameBox.scale = approach(frameBox.scale, frameTarget.scale, dt, 7);
   placeRoot();
-  applySway(now / 1000, dt);
+  applySway(now, dt);
 
   focusAmt = approach(focusAmt, 1, dt, 12);
   hoverAmt = approach(hoverAmt, hovered && hovered !== selected ? 1 : 0, dt, 16);
+  effectorAmt = approach(effectorAmt, mode === "ik" && !dragging ? 1 : 0, dt, 10);
+  targetAmt = approach(targetAmt, ik && !ik.released ? 1 : 0, dt, ik && !ik.released ? 18 : 8);
 
+  const scaleK = Math.min(1.3, Math.max(0.8, figureScale));
   renderer.clear();
   renderer.draw(figure, {
     focus: { node: selected, amount: focusAmt },
     hover: hovered ? { node: hovered, amount: hoverAmt } : null,
-    boneWidth: 3.5 * Math.min(1.3, Math.max(0.8, figureScale)),
-    jointRadius: 4.5 * Math.min(1.3, Math.max(0.8, figureScale)),
+    effectors: { nodes: effectors, amount: effectorAmt },
+    target: { ...lastTarget, amount: targetAmt },
+    limits: { node: selected, amount: focusAmt * (selected.limits ? 1 : 0) },
+    boneWidth: 3.5 * scaleK,
+    jointRadius: 4.5 * scaleK,
     headRadius: 16 * figureScale,
   });
 
@@ -289,12 +389,13 @@ const frame = (now: number) => {
       row.last = deg;
       row.value.textContent = `${deg}°`;
       if (document.activeElement !== row.slider) row.slider.value = String(deg);
-      row.slider.style.setProperty("--p", `${((deg + 180) / 360) * 100}%`);
+      const lo = Number(row.slider.min), hi = Number(row.slider.max);
+      row.slider.style.setProperty("--p", `${((deg - lo) / (hi - lo)) * 100}%`);
+      row.slider.style.setProperty("--z", `${((0 - lo) / (hi - lo)) * 100}%`);
     }
   }
   readoutValue.textContent = rows.get(selected)!.value.textContent;
+});
 
-  requestAnimationFrame(frame);
-};
 layout();
-requestAnimationFrame(frame);
+ticker.start();

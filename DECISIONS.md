@@ -20,3 +20,17 @@ time stays deterministic for physics. A GSAP adapter can come later as a separat
 ## 005 — Dirty-flag world transforms
 Changing a node's local transform marks it and its descendants dirty. World matrices are
 recomputed lazily, top-down, so reads are cheap and writes don't cascade work.
+
+## 006 — One fixed-step clock
+`Ticker` runs simulation (IK now, physics later) at a fixed 120 Hz and rendering once per
+frame with an interpolation alpha. Deterministic regardless of frame rate; steps are capped
+after stalls so a background tab can't spiral.
+
+## 007 — IK writes rotations, never positions
+Solvers compute goal positions (FABRIK) or angles (CCD) but only ever write local
+rotations back to nodes. Bone lengths are preserved by construction, FK stays the single
+source of truth, and joint limits are a simple clamp after each adjustment.
+
+## 008 — Limits live on the node, in radians, relative to rest
+`limits: [min, max]` on local rotation. Solvers and `constrain()` enforce them; the rig
+author decides which way an elbow bends.
