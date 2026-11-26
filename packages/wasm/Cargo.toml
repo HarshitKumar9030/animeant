@@ -1,0 +1,10 @@
+[package]
+name = "animeant-wasm"
+version = "0.0.0"
+edition = "2021"
+description = "Hot-path solvers for Animeant. Empty until profiling says otherwise."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]

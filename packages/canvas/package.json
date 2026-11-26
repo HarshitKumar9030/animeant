@@ -1,0 +1,12 @@
+{
+  "name": "@animeant/canvas",
+  "version": "0.0.0",
+  "description": "Canvas2D renderer for Animeant",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "build": "tsc -b" },
+  "dependencies": { "@animeant/core": "workspace:*" },
+  "license": "MIT"
+}
