@@ -168,6 +168,19 @@ button { background: none; border: 0; cursor: pointer; }
 .btn:hover { opacity: 0.86; }
 .btn:active { transform: scale(0.96); }
 .btn-label { display: inline-block; transition: transform var(--base) var(--ease-out); }
+.btn-quiet { background: var(--surface-2); color: var(--text); transition: transform var(--fast) var(--ease-out), background var(--base) var(--ease-out), color var(--base) var(--ease-out); }
+.btn-quiet:hover { opacity: 1; background: var(--surface-3); }
+.btn-quiet[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+
+/* A label that rolls to its second state instead of swapping. */
+.roll { display: inline-grid; overflow: hidden; height: 1.35em; line-height: 1.35em; vertical-align: middle; }
+.roll > span { grid-area: 1 / 1; text-align: center; transition: transform var(--slow) var(--ease-out), opacity var(--base) var(--ease-out); }
+.roll > span:last-child { transform: translateY(100%); opacity: 0; }
+[aria-pressed="true"] .roll > span:first-child { transform: translateY(-100%); opacity: 0; }
+[aria-pressed="true"] .roll > span:last-child { transform: none; opacity: 1; }
+
+.label-sm { display: none; }
+
 .btn.is-pulsing .btn-label { transform: rotate(-6deg) scale(0.98); }
 
 .segmented {
@@ -212,7 +225,9 @@ button { background: none; border: 0; cursor: pointer; }
 
 /* ---------- Transport ---------- */
 
+.transport.is-disabled { opacity: 0.4; pointer-events: none; }
 .transport {
+  transition: opacity var(--base) var(--ease-out);
   position: absolute;
   left: 12px;
   right: 12px;
@@ -469,6 +484,10 @@ button { background: none; border: 0; cursor: pointer; }
 
   .bar { flex-wrap: wrap; padding: 14px 0; gap: 10px; }
   .brand-tag { display: none; }
+  .label-lg { display: none; }
+  .label-sm { display: inline; }
+  .bar-actions { gap: 6px; }
+  .btn { padding: 0 12px; }
   .segmented button { min-width: 38px; padding: 0 10px; }
   .transport {
     left: 8px;

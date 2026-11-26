@@ -1,6 +1,8 @@
 import {
   Animator,
   Figure,
+  Ragdoll,
+  SpringChain,
   Ticker,
   Tweens,
   angleDelta,
@@ -27,6 +29,7 @@ const hint = $<HTMLParagraphElement>("hint");
 const readoutName = $<HTMLSpanElement>("readout-name");
 const readoutValue = $<HTMLSpanElement>("readout-value");
 const resetBtn = $<HTMLButtonElement>("reset");
+const ragdollBtn = $<HTMLButtonElement>("ragdoll");
 const panel = $<HTMLElement>("panel");
 const handle = $<HTMLButtonElement>("panel-handle");
 const solverRow = $<HTMLDivElement>("solver-row");
@@ -34,13 +37,16 @@ const transport = $<HTMLDivElement>("transport");
 const playBtn = $<HTMLButtonElement>("play");
 const scrub = $<HTMLInputElement>("scrub");
 const scrubTime = $<HTMLSpanElement>("scrub-time");
-$<HTMLSpanElement>("count").textContent = String(humanoid.nodes.length);
-
 const figure = Figure.fromRig(humanoid);
+/** Nodes with a custom bone width are decoration (the ponytail): not listed, not grabbable. */
+const decorative = (n: Node) => typeof n.meta.boneWidth === "number";
+$<HTMLSpanElement>("count").textContent = String(figure.nodes.filter((n) => !decorative(n)).length);
 const renderer = new CanvasRenderer(canvas);
 const animator = new Animator(figure);
 const tweens = new Tweens();
 const ticker = new Ticker({ fixedStep: 1 / 120 });
+const hair = new SpringChain(figure.chain(["hair1", "hair2", "hair3", "hair4"]), { stiffness: 0.045, damping: 0.9 });
+const ragdoll = new Ragdoll(figure, { friction: 0.55, bounce: 0.15 });
 
 // ---------- Theme ----------
 
@@ -110,7 +116,7 @@ const depthOf = (n: Node) => {
 
 const rows = new Map<Node, { li: HTMLLIElement; value: HTMLSpanElement; slider: HTMLInputElement; last: number }>();
 
-figure.nodes.forEach((node, i) => {
+figure.nodes.filter((n) => !decorative(n)).forEach((node, i) => {
   const li = document.createElement("li");
   li.className = "node";
   li.style.animationDelay = `${i * 30}ms`;
@@ -296,6 +302,7 @@ type IKDrag = {
 let ik: IKDrag | null = null;
 let settling: IKDrag[] = [];
 let effectorAmt = 1;
+let floorAmt = 0;
 let targetAmt = 0;
 let lastTarget = { x: 0, y: 0, reached: true };
 
@@ -339,6 +346,7 @@ const hitTest = (p: { x: number; y: number }): Node | null => {
   let best: Node | null = null;
   let bestD = radius;
   for (const n of figure.nodes) {
+    if (decorative(n)) continue;
     const w = n.worldPosition;
     const d = Math.hypot(w.x - p.x, w.y - p.y);
     if (d < bestD) { bestD = d; best = n; }
@@ -350,7 +358,9 @@ canvas.addEventListener("pointermove", (e) => {
   const p = toStage(e);
   if (dragging && e.pointerId === dragging.pointerId) {
     const node = dragging.node;
-    if (node === figure.root) {
+    if (ragdoll.active) {
+      ragdoll.drag({ x: p.x - dragging.grab.x, y: p.y - dragging.grab.y });
+    } else if (node === figure.root) {
       offset.x = p.x - dragging.grab.x - renderer.width / 2;
       offset.y = p.y - dragging.grab.y - frameBox.cy;
     } else if (ik) {
@@ -382,6 +392,13 @@ canvas.addEventListener("pointerdown", (e) => {
   tweens.kill(offset);
   for (const n of figure.nodes) tweens.kill(n);
 
+  if (ragdoll.active) {
+    ragdoll.grab(hit, w);
+    select(hit);
+    canvas.style.cursor = "grabbing";
+    return;
+  }
+
   const chain = mode === "ik" ? chains.get(hit) : undefined;
   if (ik?.released) settling.push(ik);
   settling = settling.filter((d) => d.chain !== chain);
@@ -395,6 +412,7 @@ canvas.addEventListener("pointerdown", (e) => {
 const endDrag = (e: PointerEvent) => {
   if (!dragging || e.pointerId !== dragging.pointerId) return;
   dragging = null;
+  ragdoll.release();
   // Let the trailing target finish its glide, or hand the limb back to the clip.
   if (ik) ik.released = true;
   canvas.style.cursor = hovered ? "grab" : "default";
@@ -405,7 +423,48 @@ canvas.addEventListener("pointerleave", () => { if (!dragging) hovered = null; }
 
 // ---------- Controls ----------
 
+const floorY = () => frameBox.cy + 116 * figureScale + 4;
+
+function setRagdoll(on: boolean) {
+  ragdollBtn.setAttribute("aria-pressed", String(on));
+  transport.classList.toggle("is-disabled", on);
+  if (on) {
+    // Hand the current pose to physics untouched.
+    animator.clear();
+    current.clear();
+    setPaused(false);
+    syncChips();
+    ik = null;
+    settling = [];
+    tweens.kill(offset);
+    for (const n of figure.nodes) tweens.kill(n);
+    ragdoll.start();
+    const side = Math.random() < 0.5 ? -1 : 1;
+    ragdoll.impulse({ x: side * 320 * figureScale, y: -220 * figureScale }, figure.node("head"));
+    hint.classList.add("is-gone");
+  } else {
+    getUp();
+  }
+}
+
+/** Blend from wherever the ragdoll left the body back to standing. */
+function getUp() {
+  ragdoll.stop();
+  offset.x = figure.root.x - renderer.width / 2;
+  offset.y = figure.root.y - frameBox.cy;
+  hair.reset();
+  // Hips first, then outward: a staggered unwind reads as standing up.
+  figure.nodes.forEach((n, i) => {
+    tweens.to(n, { rotation: 0 }, { duration: 0.75, delay: i * 0.018, ease: "inOutCubic" });
+  });
+  tweens.to(offset, { x: 0, y: 0 }, { duration: 0.9, delay: 0.08, ease: "outQuint" });
+}
+
+ragdollBtn.addEventListener("click", () => setRagdoll(!ragdoll.active));
+
 resetBtn.addEventListener("click", () => {
+  // From a ragdoll, reset means getting up: it blends from where the body lies.
+  if (ragdoll.active) return setRagdoll(false);
   ik = null;
   settling = [];
   animator.stop(undefined, 0.3);
@@ -431,6 +490,12 @@ handle.addEventListener("click", () => {
 
 // Simulation: host placement → animation → IK on top → tweens, at a fixed rate.
 ticker.onFixed((step) => {
+  if (ragdoll.active) {
+    ragdoll.bounds = { floor: floorY(), left: 6, right: renderer.width - 6 };
+    ragdoll.gravity = { x: 0, y: 2400 * figureScale };
+    ragdoll.step(step);
+    return;
+  }
   placeRoot();
   animator.rebase(figure.root);
   animator.update(step);
@@ -441,6 +506,9 @@ ticker.onFixed((step) => {
     if (!alive) ik = null;
   }
   tweens.update(step);
+  // Secondary motion last, so the ponytail reacts to the final pose.
+  hair.gravity = { x: 0, y: 900 * figureScale };
+  hair.step(step);
   for (const [layer, pb] of current) if (pb.dead) current.delete(layer);
 });
 
@@ -452,7 +520,8 @@ ticker.onFrame((rawDt) => {
 
   focusAmt = damp(focusAmt, 1, 12, dt);
   hoverAmt = damp(hoverAmt, hovered && hovered !== selected ? 1 : 0, 16, dt);
-  effectorAmt = damp(effectorAmt, mode === "ik" && !dragging ? 1 : 0, 10, dt);
+  effectorAmt = damp(effectorAmt, mode === "ik" && !dragging && !ragdoll.active ? 1 : 0, 10, dt);
+  floorAmt = damp(floorAmt, ragdoll.active ? 1 : 0, ragdoll.active ? 8 : 5, dt);
   const holding = !!ik && !ik.released;
   targetAmt = damp(targetAmt, holding ? 1 : 0, holding ? 18 : 8, dt);
 
@@ -463,7 +532,8 @@ ticker.onFrame((rawDt) => {
     hover: hovered ? { node: hovered, amount: hoverAmt } : null,
     effectors: { nodes: effectors, amount: effectorAmt },
     target: { ...lastTarget, amount: targetAmt },
-    limits: { node: selected, amount: focusAmt * (selected.limits ? 1 : 0) },
+    limits: { node: selected, amount: focusAmt * (selected.limits && !ragdoll.active ? 1 : 0) },
+    floor: { y: floorY(), amount: floorAmt },
     boneWidth: 3.5 * k,
     jointRadius: 4.5 * k,
     headRadius: 16 * figureScale,

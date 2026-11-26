@@ -19,6 +19,12 @@ const animator = new Animator(fig);
 animator.play(humanoidClips.dance, { fade: 0.4 });
 animator.play(humanoidClips.wave, { layer: 1 });      // waves while dancing
 
+// Physics: secondary motion and ragdolls, written back as rotations.
+const hair = new SpringChain(fig.chain(["hair1", "hair2", "hair3", "hair4"]));
+const ragdoll = new Ragdoll(fig, { bounds: { floor: 400 } });
+ragdoll.start();
+ragdoll.grab(fig.node("handR"), pointer);              // drag and fling
+
 // Tweens for one-off motion.
 tweens.to(fig.node("head"), { rotation: 0.3 }, { duration: 0.5, ease: "outBack" });
 ```
@@ -27,8 +33,8 @@ tweens.to(fig.node("head"), { rotation: 0.3 }, { duration: 0.5, ease: "outBack" 
 
 | Package | What |
 |---|---|
-| `@animeant/core` | Node graph, FK, joint limits, FABRIK/CCD IK, tweens, JSON clips, layered animator, fixed-step ticker |
-| `@animeant/canvas` | Canvas2D renderer with focus, effector, target and limit overlays |
+| `@animeant/core` | Node graph, FK, joint limits, FABRIK/CCD IK, tweens, JSON clips, layered animator, spring chains, ragdoll, fixed-step ticker |
+| `@animeant/canvas` | Canvas2D renderer: per-bone widths, focus, effector, target, limit and floor overlays |
 | `packages/wasm` | Rust hot paths, reserved until profiling says so |
 | `apps/playground` | Live demo and docs |
 

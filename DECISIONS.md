@@ -52,3 +52,23 @@ absolutely. Hosts that move the root call `animator.rebase(figure.root)` each st
 Host placement → Animator → IK (blended over the animated pose by a per-drag weight) →
 Tweens. Each stage reads the previous stage's output, so IK can pin a hand on a dancing
 figure, and a tween (like reset) wins while the animator fades out.
+
+## 013 — Physics writes rotations too (position-based dynamics with FK projection)
+Springs and the ragdoll simulate verlet particles, then write the result back as joint
+rotations (plus the root's position) and project the particles onto that pose. Bone lengths
+and joint limits are therefore exact by construction, renderers only ever read nodes, and the
+same figure moves between animation, IK and physics with no conversion.
+
+## 014 — Corrections are not motion
+Velocity is the motion the figure actually made between steps. Rigid fix-ups (pinning the
+grabbed node, pushing the body back inside bounds) shift previous positions too, so they don't
+turn into velocity. Counting them as motion pumped energy into the ragdoll until it spun.
+
+## 015 — Limits pick the right wrap
+`Node.turn(delta)` resolves r, r±2π to whichever is inside or nearest the limits before
+clamping. A shortest-path turn that crosses ±π could otherwise land at the wrong end of the
+range and stick there forever. All solvers turn joints through it.
+
+## 016 — Multi-child joints use a least-squares fit
+Hips and chest have several children. Their rotation is the 2D Kabsch fit,
+atan2(Σ cross, Σ dot), so long bones dominate and an 8px shoulder stub can't twist the chest.
