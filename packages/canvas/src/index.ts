@@ -17,6 +17,12 @@ export interface DrawOptions {
   jointRadius?: number;
   /** Draw the last node named "head" as a circle. */
   headRadius?: number;
+  /** Joints that can be dragged as IK end effectors, drawn as hollow rings. */
+  effectors?: { nodes: readonly Node[]; amount: number } | null;
+  /** An IK goal: a crosshair, solid when reached. */
+  target?: { x: number; y: number; amount: number; reached: boolean } | null;
+  /** Show a node's allowed rotation range as a wedge. */
+  limits?: { node: Node; amount: number } | null;
 }
 
 export const defaultTheme: CanvasTheme = {
@@ -104,6 +110,8 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
+    if (opts.limits && opts.limits.amount > 0.001) this.#limitWedge(opts.limits.node, opts.limits.amount);
+
     for (const node of figure.nodes) {
       const p = node.worldPosition;
       ctx.beginPath();
@@ -112,8 +120,70 @@ export class CanvasRenderer {
       ctx.fill();
     }
 
+    if (opts.effectors && opts.effectors.amount > 0.001) {
+      ctx.save();
+      ctx.strokeStyle = theme.accent;
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.75 * opts.effectors.amount;
+      for (const n of opts.effectors.nodes) {
+        const p = n.worldPosition;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, jointR + 4 + 2 * opts.effectors.amount, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    if (opts.target && opts.target.amount > 0.001) this.#target(opts.target);
     if (opts.hover && opts.hover.amount > 0.001) this.#ring(opts.hover.node, opts.hover.amount, jointR, 0.35);
     if (opts.focus && opts.focus.amount > 0.001) this.#ring(opts.focus.node, opts.focus.amount, jointR, 1);
+  }
+
+  #limitWedge(node: Node, amount: number): void {
+    const child = node.children[0];
+    if (!node.limits || !child) return;
+    const { ctx, theme } = this;
+    const p = node.worldPosition;
+    // World angle of the bone at local rotation 0, then add the limits.
+    const rest = node.worldRotation - node.rotation + Math.atan2(child.y, child.x);
+    const [min, max] = node.limits;
+    const r = 34;
+    ctx.save();
+    ctx.globalAlpha = 0.14 * amount;
+    ctx.fillStyle = theme.accent;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.arc(p.x, p.y, r * (0.7 + 0.3 * amount), rest + min, rest + max);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 0.5 * amount;
+    ctx.strokeStyle = theme.accent;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r * (0.7 + 0.3 * amount), rest + min, rest + max);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  #target(t: { x: number; y: number; amount: number; reached: boolean }): void {
+    const { ctx, theme } = this;
+    const s = 6 + 4 * t.amount;
+    ctx.save();
+    ctx.globalAlpha = t.amount;
+    ctx.strokeStyle = theme.accent;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(t.x - s, t.y); ctx.lineTo(t.x - 3, t.y);
+    ctx.moveTo(t.x + 3, t.y); ctx.lineTo(t.x + s, t.y);
+    ctx.moveTo(t.x, t.y - s); ctx.lineTo(t.x, t.y - 3);
+    ctx.moveTo(t.x, t.y + 3); ctx.lineTo(t.x, t.y + s);
+    ctx.stroke();
+    if (!t.reached) {
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, s + 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   #ring(node: Node, amount: number, jointR: number, alpha: number): void {
