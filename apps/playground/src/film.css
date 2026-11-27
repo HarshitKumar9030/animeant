@@ -62,6 +62,11 @@ button, a { font: inherit; color: inherit; }
 .ctl-play svg { position: absolute; width: 14px; height: 14px; fill: currentColor; transition: opacity var(--base) var(--ease-out), transform var(--slow) var(--spring); }
 .ctl-play[data-state="playing"] .icon-play,
 .ctl-play[data-state="paused"] .icon-pause { opacity: 0; transform: scale(0.6) rotate(-45deg); }
+.ctl-icon { width: 36px; position: relative; }
+.ctl-icon svg { position: absolute; width: 16px; height: 16px; fill: currentColor; transition: opacity var(--base) var(--ease-out), transform var(--slow) var(--spring); }
+.ctl-icon[aria-pressed="true"] .icon-muted,
+.ctl-icon[aria-pressed="false"] .icon-sound { opacity: 0; transform: scale(0.6); }
+.ctl-icon[aria-pressed="false"] { color: var(--muted); }
 .ctl-text { padding: 0 14px; font-weight: 500; font-size: 13px; }
 .ctl-quiet { color: var(--muted); }
 .ctl-quiet:hover { color: var(--text); }
@@ -101,7 +106,12 @@ button, a { font: inherit; color: inherit; }
 @media (max-width: 560px) {
   .controls { gap: 6px; padding: 6px; }
   .ctl-quiet, .time { display: none; }
-  .ctl-text { padding: 0 12px; }
+  .ctl-icon { width: 36px; position: relative; }
+.ctl-icon svg { position: absolute; width: 16px; height: 16px; fill: currentColor; transition: opacity var(--base) var(--ease-out), transform var(--slow) var(--spring); }
+.ctl-icon[aria-pressed="true"] .icon-muted,
+.ctl-icon[aria-pressed="false"] .icon-sound { opacity: 0; transform: scale(0.6); }
+.ctl-icon[aria-pressed="false"] { color: var(--muted); }
+.ctl-text { padding: 0 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }

@@ -1,8 +1,9 @@
 import { Animator, Figure3D, hominidGait, hominids, type GaitParams, type Playback, type Rig3D } from "@animeant/core";
 import { BodyView } from "@animeant/three";
+import { FilmAudio } from "./film-audio";
 import {
   ACESFilmicToneMapping, CanvasTexture, Color, CylinderGeometry, DirectionalLight, Float32BufferAttribute, Fog, Group,
-  HemisphereLight, IcosahedronGeometry, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera, PlaneGeometry,
+  ConeGeometry, HemisphereLight, IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, Sprite, SpriteMaterial, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera, PlaneGeometry,
   Scene, SphereGeometry, Vector3, WebGLRenderer,
 } from "three";
 
@@ -94,6 +95,8 @@ interface Actor {
   speed: number;
   duration: number;
   height: number;
+  /** Walk phase last frame, for footstep triggers. */
+  lastPhase: number;
 }
 
 const shadowTex = (() => {
@@ -127,7 +130,7 @@ const actors: Actor[] = SPECIES.map((sp) => {
   // Standing height: the top of the skull at rest.
   let top = 0;
   for (const n of fig.nodes) top = Math.max(top, n.worldPosition.y);
-  return { sp, fig, body, group, shadow, animator, pb, speed: gait.speed, duration: gait.clip.duration, height: top + 0.15 };
+  return { sp, fig, body, group, shadow, animator, pb, speed: gait.speed, duration: gait.clip.duration, height: top + 0.15, lastPhase: -1 };
 });
 
 // Distance and walk phase at each stage boundary, so any time can be evaluated directly.
@@ -203,6 +206,21 @@ const tree = (x: number, z: number, forest: boolean) => {
 };
 
 for (let x = -16; x < forestEnd + 4; x += 1.6 + rand() * 1.8) tree(x, -3.5 - rand() * 18, true);
+// Leaves the opening crane drops through: canopies between the high camera
+// and the walker, on trunks the settled tracking shot never sees.
+for (const [tx, tz, cx, cy, cz, w] of [
+  [-3.8, 4.6, -1.5, 6.5, 3.7, 2.4],
+  [2.8, -3.6, 1.6, 7.3, 1.2, 2.3],
+  [-6.5, 2.5, -3.6, 5.8, 2.4, 2.6],
+] as const) {
+  const trunk = new Mesh(trunkGeo, trunkMat);
+  trunk.scale.set(1.6, cy, 1.6);
+  trunk.position.set(tx, cy / 2, tz);
+  const canopy = new Mesh(canopyGeo, leafDark);
+  canopy.scale.set(w, w * 0.55, w);
+  canopy.position.set(cx, cy, cz);
+  scene.add(trunk, canopy);
+}
 for (let x = -16; x < forestEnd - 6; x += 5 + rand() * 4) tree(x, 9 + rand() * 6, true);
 for (let x = forestEnd; x < end; x += 7 + rand() * 12) tree(x, -6 - rand() * 26, false);
 for (let x = 0; x < end; x += 3 + rand() * 6) {
@@ -219,10 +237,58 @@ for (let i = 0; i < 9; i++) {
   scene.add(hill);
 }
 
+// Grass: thousands of instanced blades, thicker out in the open.
+{
+  const blade = new ConeGeometry(0.022, 0.26, 3);
+  blade.translate(0, 0.13, 0);
+  const count = 7000;
+  const grass = new InstancedMesh(blade, new MeshStandardMaterial({ roughness: 1, emissive: "#3a3220", emissiveIntensity: 0.35 }), count);
+  const m = new Matrix4();
+  const c = new Color();
+  const greenA = new Color("#7d9a4c"), greenB = new Color("#a3a457"), dryA = new Color("#d6bd7e"), dryB = new Color("#e8d39a");
+  let n = 0;
+  while (n < count) {
+    const x = -14 + rand() * (end + 10);
+    const z = -14 + rand() * 18;
+    if (Math.abs(z) < 0.75) continue;
+    const open = smooth((x - forestEnd + 4) / 16);
+    if (rand() > 0.35 + open * 0.65) continue;
+    const h = 0.5 + rand() * (0.6 + open * 0.7);
+    m.makeRotationY(rand() * Math.PI).premultiply(new Matrix4().makeScale(1, h, 1));
+    m.setPosition(x, 0, z);
+    grass.setMatrixAt(n, m);
+    c.copy(open > 0.5 ? dryA : greenA).lerp(open > 0.5 ? dryB : greenB, rand());
+    grass.setColorAt(n, c);
+    n++;
+  }
+  scene.add(grass);
+}
+
+// A low sun and a far ridge, both kept in frame as the camera travels.
+const sunSprite = (() => {
+  const c = document.createElement("canvas");
+  c.width = c.height = 256;
+  const g = c.getContext("2d")!;
+  const grad = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  grad.addColorStop(0, "rgba(255,247,225,1)");
+  grad.addColorStop(0.18, "rgba(255,236,196,0.95)");
+  grad.addColorStop(0.35, "rgba(255,214,150,0.35)");
+  grad.addColorStop(1, "rgba(255,200,120,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 256, 256);
+  const sprite = new Sprite(new SpriteMaterial({ map: new CanvasTexture(c), depthWrite: false, fog: false, transparent: true }));
+  sprite.scale.set(46, 46, 1);
+  scene.add(sprite);
+  return sprite;
+})();
+const ridge = new Mesh(new SphereGeometry(1, 48, 16), new MeshStandardMaterial({ color: "#9a8f7c", roughness: 1 }));
+ridge.scale.set(240, 18, 30);
+scene.add(ridge);
+
 // ---------- Pose the film at time t ----------
 
 const tmp = new Vector3();
-function evaluate(t: number) {
+function evaluate(t: number, sound: FilmAudio | null = null) {
   const solo = t < SOLO_END + 0.001;
   const x = xAt(t);
 
@@ -252,7 +318,18 @@ function evaluate(t: number) {
     a.group.visible = opacity > 0.001;
     a.shadow.visible = a.group.visible;
     (a.shadow.material as MeshBasicMaterial).opacity = opacity;
-    if (!a.group.visible) return;
+    if (!a.group.visible) { a.lastPhase = -1; return; }
+    // Footsteps: heel strikes at phase 0 (left) and 0.5 (right); knuckles in between.
+    const phase = time / a.duration;
+    if (sound && a.lastPhase >= 0 && phase !== a.lastPhase) {
+      const wrapped = phase < a.lastPhase;
+      const crossed = (at: number) => (wrapped ? a.lastPhase < at || phase >= at || at === 0 : a.lastPhase < at && phase >= at);
+      const pan = (ax - camera.position.x) / 3;
+      const weight = a.height / 1.7;
+      if (crossed(0) || crossed(0.5)) sound.step(weight, pan, opacity);
+      if (a.sp.gait.quadruped && (crossed(0.25) || crossed(0.75))) sound.step(weight, pan, opacity, true);
+    }
+    a.lastPhase = phase;
     a.group.position.set(ax, 0, 0);
     a.shadow.position.x = ax + (a.sp.gait.quadruped ? 0.15 : 0);
     a.pb.seek(time);
@@ -270,8 +347,30 @@ function evaluate(t: number) {
   const targetX = x + lerp(0.35, -LINE_GAP * 2 + 0.6, wide);
   const targetY = lerp(hNow * 0.62, 0.95, wide);
   const drift = Math.sin(t * 0.17) * 0.35;
-  camera.position.set(targetX + 0.8 + drift, targetY + lerp(0.15, 1.4, wide), dist);
-  camera.lookAt(tmp.set(targetX, targetY, 0));
+  const pos = new Vector3(targetX + 0.8 + drift, targetY + lerp(0.15, 1.4, wide), dist);
+  const look = new Vector3(targetX, targetY, 0);
+  const shot = (w: number, p: [number, number, number], l: [number, number, number]) => {
+    if (w <= 0) return;
+    pos.lerp(tmp.set(...p), w);
+    look.lerp(tmp.set(...l), w);
+  };
+  // Opening: a crane down through the canopy.
+  shot(1 - smooth((t - 0.6) / 4.6), [x - 1.6, 8.6, dist * 1.1], [x + 0.8, 2.2, 0]);
+  // First upright steps: down at the feet.
+  shot(smooth((t - 11.2) / 0.9) * (1 - smooth((t - 15) / 1.1)), [x + 2.2, 0.14, 2.7 * portrait], [x + 0.7, 0.4, 0]);
+  // Homo erectus strides across a slower camera.
+  {
+    const x0 = xAt(33.6);
+    const cx = x0 + 1.6 + (x - x0) * 0.6;
+    shot(smooth((t - 33.4) / 1) * (1 - smooth((t - 42) / 1.2)), [cx + 0.4, 1.25, 5.6 * portrait], [cx, 1.05, 0]);
+  }
+  // Homo sapiens: a slow push in toward the face.
+  {
+    const k = smooth((t - 45.8) / 6.5) * (1 - smooth((t - 53.6) / 1.2));
+    shot(k * 0.85, [x + 1.1, 1.62, 2.1 * portrait], [x + 0.05, 1.45, 0]);
+  }
+  camera.position.copy(pos);
+  camera.lookAt(look);
 
   // Light and air: forest morning to open savanna to evening.
   const p = x / startX[actors.length]!;
@@ -279,7 +378,12 @@ function evaluate(t: number) {
   (scene.background as Color).copy(sky);
   scene.fog!.color.copy(sky);
   sun.intensity = lerp(2.3, 2.6, smooth(p));
-  sun.position.set(camera.position.x - 6, 8, 6);
+  const dusk = smooth((t - SOLO_END) / LINEUP);
+  sunSprite.position.set(camera.position.x + 30, lerp(34, 14, dusk), -170);
+  (sunSprite.material as SpriteMaterial).opacity = lerp(0.35, 1, smooth((x - forestEnd) / 10));
+  ridge.position.set(camera.position.x * 0.85, -4, -190);
+  sun.color.set(0xfff0d8).lerp(new Color(0xffc48a), dusk);
+  sun.position.set(camera.position.x - 6, lerp(8, 4, dusk), 6);
   sun.target.position.set(camera.position.x, 0, 0);
   sun.target.updateMatrixWorld();
 }
@@ -397,6 +501,12 @@ function drawCaptions(t: number) {
   cap.fillStyle = top;
   cap.fillRect(0, 0, W, H * 0.4);
 
+  const vig = cap.createRadialGradient(W / 2, H * 0.48, Math.min(W, H) * 0.35, W / 2, H * 0.48, Math.hypot(W, H) * 0.62);
+  vig.addColorStop(0, "rgba(0,0,0,0)");
+  vig.addColorStop(1, "rgba(20,12,6,0.32)");
+  cap.fillStyle = vig;
+  cap.fillRect(0, 0, W, H);
+
   for (const c of cards) {
     if (t < c.from || t > c.to + 0.6) continue;
     const inT = easeOut((t - c.from) / 0.7);
@@ -447,6 +557,18 @@ const recordBtn = document.getElementById("record") as HTMLButtonElement;
 const controls = document.getElementById("controls")!;
 const filmEl = document.querySelector(".film")!;
 const chapters = document.getElementById("chapters")!;
+const soundBtn = document.getElementById("sound") as HTMLButtonElement;
+
+let audio: FilmAudio | null = null;
+let soundOn = false;
+const setSound = async (on: boolean) => {
+  audio ??= new FilmAudio();
+  soundOn = on;
+  soundBtn.setAttribute("aria-pressed", String(on));
+  soundBtn.setAttribute("aria-label", on ? "Mute" : "Sound on");
+  await audio.enable(on);
+};
+soundBtn.addEventListener("click", () => void setSound(!soundOn));
 for (const at of [...SPECIES.map((_, i) => i * STAGE), SOLO_END, SOLO_END + LINEUP]) {
   if (at <= 0) continue;
   const s = document.createElement("span");
@@ -456,6 +578,7 @@ for (const at of [...SPECIES.map((_, i) => i * STAGE), SOLO_END, SOLO_END + LINE
 
 let t = 0;
 let playing = true;
+let scrubbed = false;
 let last = performance.now();
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
@@ -467,11 +590,12 @@ const setPlaying = (p: boolean) => {
   poke();
 };
 playBtn.addEventListener("click", () => setPlaying(!playing));
-scrub.addEventListener("input", () => { t = (Number(scrub.value) / 1000) * TOTAL; });
+scrub.addEventListener("input", () => { t = (Number(scrub.value) / 1000) * TOTAL; scrubbed = true; });
 addEventListener("keydown", (e) => {
   if (e.key === " ") { e.preventDefault(); setPlaying(!playing); }
-  if (e.key === "ArrowRight") t = Math.min(TOTAL, t + 5);
-  if (e.key === "ArrowLeft") t = Math.max(0, t - 5);
+  if (e.key === "ArrowRight") { t = Math.min(TOTAL, t + 5); scrubbed = true; }
+  if (e.key === "ArrowLeft") { t = Math.max(0, t - 5); scrubbed = true; }
+  if (e.key === "m") void setSound(!soundOn);
 });
 
 // Controls fade away while the film plays untouched.
@@ -496,8 +620,10 @@ recordBtn.addEventListener("click", () => {
   comp.width = 1920;
   comp.height = 1080;
   const ctx = comp.getContext("2d")!;
-  const stream = comp.captureStream(60);
-  const type = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
+  // Recordings always carry the sound; the click is the gesture that allows it.
+  void setSound(true);
+  const stream = new MediaStream([...comp.captureStream(60).getVideoTracks(), ...audio!.stream.getAudioTracks()]);
+  const type = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"].find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
   const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 14_000_000 });
   const chunks: Blob[] = [];
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
@@ -535,7 +661,17 @@ function frame(now: number) {
       setPlaying(false);
     }
   }
-  evaluate(t);
+  // Footsteps only for real playback, not for scrubs or jumps.
+  const audible = audio && soundOn && playing && !scrubbed ? audio : null;
+  scrubbed = false;
+  evaluate(t, audible);
+  if (audio && soundOn) {
+    const x = xAt(t);
+    const chapter = t < SOLO_END ? Math.min(SPECIES.length - 1, Math.floor(t / STAGE)) : SPECIES.length;
+    const forest = 1 - smooth((x - forestEnd + 4) / 10);
+    const swell = smooth((t - SOLO_END) / 4) * (1 - smooth((t - TOTAL + 2) / 2));
+    audio.update(chapter, forest, 1 - forest, playing ? swell : 0);
+  }
   renderer.render(scene, camera);
   drawCaptions(t);
   if (recording) {
