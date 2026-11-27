@@ -1,14 +1,19 @@
 import {
-  ANGLE_CHANNELS, Animator, CHANNELS, Figure, Figure3D, Ragdoll, compileClip, degToRad, humanoid, humanoid3d,
-  humanoid3dClips, humanoidClips, radToDeg,
+  ANGLE_CHANNELS, Animator, CHANNELS, Figure, Figure3D, Ragdoll, compileClip, degToRad, dog3d, dog3dClips, hominids,
+  humanoid, humanoid3d, humanoid3dClips, humanoidClips, radToDeg,
   type Channel, type Clip, type Key, type Node, type Node3D, type Rig, type Rig3D,
 } from "@animeant/core";
 import { figureToSvg, type SvgOptions } from "./svg";
 
-export const RIGS: Record<string, Rig | Rig3D> = { humanoid, humanoid3d };
+export const RIGS: Record<string, Rig | Rig3D> = {
+  humanoid, humanoid3d, dog3d,
+  ape: hominids.ape, australopithecus: hominids.australopithecus, habilis: hominids.habilis,
+  erectus: hominids.erectus, sapiens: hominids.sapiens,
+};
 export const CLIPS: Record<string, Clip> = {
   ...Object.fromEntries(Object.values(humanoidClips).map((c) => [c.name, c])),
   ...Object.fromEntries(Object.values(humanoid3dClips).map((c) => [c.name, c])),
+  ...Object.fromEntries(Object.values(dog3dClips).map((c) => [c.name, c])),
 };
 
 type AnyFigure = Figure | Figure3D;

@@ -44,10 +44,10 @@ export function createServer(studio = new Studio()): McpServer {
 
   server.registerTool("create_figure", {
     title: "Create figure",
-    description: "Create a figure from a preset rig (humanoid, humanoid3d) or your own rig JSON. Returns its nodes.",
+    description: "Create a figure from a preset rig (humanoid, humanoid3d, dog3d, ape, australopithecus, habilis, erectus, sapiens) or your own rig JSON. Returns its nodes.",
     inputSchema: {
       id: z.string().optional().describe("Name for the figure; generated if omitted. Reusing an id replaces it."),
-      preset: z.string().optional().describe("humanoid (2D) or humanoid3d"),
+      preset: z.string().optional().describe("humanoid (2D); humanoid3d, dog3d, ape, australopithecus, habilis, erectus, sapiens (3D)"),
       rig: z.object({ name: z.string().optional(), dimensions: z.literal(3).optional(), nodes: z.array(z.record(z.string(), z.unknown())) })
         .optional()
         .describe("Rig JSON: {nodes: [{name, parent?, x, y, (z), rotation | rx/ry/rz (radians), limits?}]}. One node has no parent."),
