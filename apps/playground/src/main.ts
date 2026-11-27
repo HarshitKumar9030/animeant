@@ -18,6 +18,7 @@ import {
   type Solver,
 } from "@animeant/core";
 import { CanvasRenderer } from "@animeant/canvas";
+import { segmented } from "./segmented";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -174,28 +175,6 @@ window.addEventListener("resize", moveHighlight);
 
 // ---------- Segmented controls ----------
 
-/** A segmented control whose pill slides to the checked option. */
-function segmented<T extends string>(root: HTMLElement, initial: T, onChange: (v: T) => void) {
-  const pill = root.querySelector<HTMLSpanElement>(".segmented-pill")!;
-  const buttons = [...root.querySelectorAll<HTMLButtonElement>("button")];
-  const set = (value: T, notify: boolean) => {
-    for (const b of buttons) {
-      const on = b.dataset.value === value;
-      b.setAttribute("aria-checked", String(on));
-      if (on) {
-        pill.style.width = `${b.offsetWidth}px`;
-        pill.style.transform = `translateX(${b.offsetLeft}px)`;
-      }
-    }
-    if (notify) onChange(value);
-  };
-  buttons.forEach((b) => b.addEventListener("click", () => set(b.dataset.value as T, true)));
-  const sync = () =>
-    set((buttons.find((b) => b.getAttribute("aria-checked") === "true")?.dataset.value ?? initial) as T, false);
-  new ResizeObserver(sync).observe(root);
-  set(initial, false);
-}
-
 type Mode = "fk" | "ik";
 let mode: Mode = "ik";
 let solver: Solver = "fabrik";
@@ -211,6 +190,9 @@ segmented<Mode>($("mode"), mode, (v) => {
   setHint();
 });
 segmented<Solver>($("solver"), solver, (v) => (solver = v));
+segmented($("dim"), "2d", (_, button) => {
+  setTimeout(() => (location.href = button.dataset.href!), 180);
+});
 segmented<"0.5" | "1" | "2">($("speed"), "1", (v) => {
   speed = Number(v);
   for (const pb of animator.playbacks) pb.speed = speed;

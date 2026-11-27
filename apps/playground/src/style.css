@@ -548,3 +548,34 @@ button { background: none; border: 0; cursor: pointer; }
     transition-duration: 1ms !important;
   }
 }
+
+/* ---------- 3D page ---------- */
+
+.stage canvas.is-webgl { touch-action: none; }
+.axes {
+  display: grid;
+  gap: 2px;
+  padding: 6px 10px 10px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.axis {
+  display: grid;
+  grid-template-columns: 18px 1fr 44px;
+  align-items: center;
+  gap: 10px;
+  height: 30px;
+  font-size: 12px;
+}
+.axis-name { color: var(--faint); font-family: "JetBrains Mono", ui-monospace, monospace; }
+.axis-value {
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--fast) var(--ease-out);
+}
+.axis.is-locked { opacity: 0.35; }
+.axis.is-locked .slider { pointer-events: none; }
+.axis { transition: opacity var(--base) var(--ease-out); }
+.axis .slider { grid-column: auto; }

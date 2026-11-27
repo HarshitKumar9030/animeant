@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Animeant 3D Playground</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="bar">
+        <div class="brand">
+          <span class="brand-name">animeant</span>
+          <span class="brand-tag">Nodal animation, in 3D</span>
+        </div>
+        <div class="bar-actions">
+          <div class="segmented" id="dim" role="radiogroup" aria-label="Dimensions">
+            <span class="segmented-pill"></span>
+            <button type="button" role="radio" data-value="2d" data-href="./">2D</button>
+            <button type="button" role="radio" data-value="3d" data-href="./3d.html">3D</button>
+          </div>
+          <button class="btn" id="reset" type="button">
+            <span class="btn-label"><span class="label-lg">Reset pose</span><span class="label-sm">Reset</span></span>
+          </button>
+        </div>
+      </header>
+
+      <main class="stage">
+        <canvas id="canvas" aria-label="3D figure stage"></canvas>
+        <p class="hint" id="hint"><span class="hint-long">Drag a hand, foot or head. Drag empty space to orbit.</span><span class="hint-short">Drag a hand or foot</span></p>
+        <div class="readout" id="readout" aria-live="polite">
+          <span class="readout-name" id="readout-name">hips</span>
+          <span class="readout-value" id="readout-value">0°</span>
+        </div>
+
+        <div class="transport" id="transport">
+          <button class="play" id="play" type="button" aria-label="Pause" data-state="playing">
+            <svg class="icon-pause" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="2.5" width="3" height="11" rx="1"/><rect x="9.5" y="2.5" width="3" height="11" rx="1"/></svg>
+            <svg class="icon-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.9v10.2a.9.9 0 0 0 1.37.77l8.1-5.1a.9.9 0 0 0 0-1.54l-8.1-5.1A.9.9 0 0 0 4.5 2.9Z"/></svg>
+          </button>
+          <div class="chips" id="clips" role="group" aria-label="Clips">
+            <button class="chip" type="button" data-clip="idle" aria-pressed="false">Idle</button>
+            <button class="chip" type="button" data-clip="walk" aria-pressed="false">Walk</button>
+            <span class="chips-sep" aria-hidden="true"></span>
+            <button class="chip chip-layer" type="button" data-clip="wave" aria-pressed="false" title="Plays on a layer above">
+              <span class="chip-dot" aria-hidden="true"></span>Wave
+            </button>
+          </div>
+          <div class="scrub">
+            <input class="slider scrub-slider" id="scrub" type="range" min="0" max="1000" value="0" aria-label="Seek" disabled />
+            <span class="scrub-time" id="scrub-time">0.00s</span>
+          </div>
+          <div class="segmented segmented-sm" id="speed" role="radiogroup" aria-label="Speed">
+            <span class="segmented-pill"></span>
+            <button type="button" role="radio" data-value="0.5">½×</button>
+            <button type="button" role="radio" data-value="1">1×</button>
+            <button type="button" role="radio" data-value="2">2×</button>
+          </div>
+        </div>
+      </main>
+
+      <aside class="panel" id="panel">
+        <button class="panel-handle" id="panel-handle" type="button" aria-label="Toggle node list">
+          <span></span>
+        </button>
+        <div class="panel-head">
+          <span class="panel-title">Nodes</span>
+          <span class="panel-count" id="count"></span>
+        </div>
+        <div class="axes" id="axes">
+          <label class="axis"><span class="axis-name">X</span><input class="slider" type="range" data-axis="rx" step="1" aria-label="X rotation" /><span class="axis-value">0°</span></label>
+          <label class="axis"><span class="axis-name">Y</span><input class="slider" type="range" data-axis="ry" step="1" aria-label="Y rotation" /><span class="axis-value">0°</span></label>
+          <label class="axis"><span class="axis-name">Z</span><input class="slider" type="range" data-axis="rz" step="1" aria-label="Z rotation" /><span class="axis-value">0°</span></label>
+        </div>
+        <ul class="nodes" id="nodes">
+          <span class="nodes-highlight" id="highlight"></span>
+        </ul>
+      </aside>
+    </div>
+    <script type="module" src="/src/three.ts"></script>
+  </body>
+</html>
