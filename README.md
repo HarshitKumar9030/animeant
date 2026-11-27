@@ -2,8 +2,12 @@
 
 Code-first 2D skeletal animation for the web, modeled around **nodes**, not whole figures.
 
+```bash
+npm install @animeant/core @animeant/canvas
+```
+
 ```ts
-import { Figure } from "@animeant/core";
+import { Animator, Figure, Ragdoll, SpringChain, Tweens, humanoid, humanoidClips } from "@animeant/core";
 
 const fig = Figure.fromRig(humanoid);
 
@@ -26,8 +30,24 @@ ragdoll.start();
 ragdoll.grab(fig.node("handR"), pointer);              // drag and fling
 
 // Tweens for one-off motion.
+const tweens = new Tweens();
 tweens.to(fig.node("head"), { rotation: 0.3 }, { duration: 0.5, ease: "outBack" });
 ```
+
+Drive it with the fixed-step `Ticker` and draw with `@animeant/canvas`:
+
+```ts
+import { Ticker } from "@animeant/core";
+import { CanvasRenderer } from "@animeant/canvas";
+
+const renderer = new CanvasRenderer(canvas);
+const ticker = new Ticker();
+ticker.onFixed((dt) => { animator.update(dt); tweens.update(dt); hair.step(dt); });
+ticker.onFrame(() => renderer.draw(fig));
+ticker.start();
+```
+
+ESM only, zero runtime dependencies, written in TypeScript with types included.
 
 ## Packages
 
