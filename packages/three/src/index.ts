@@ -124,3 +124,5 @@ export class FigureView {
     this.object.removeFromParent();
   }
 }
+
+export { BodyView, type BodyOptions, type BodySegment, type BodyBlob } from "./body";
