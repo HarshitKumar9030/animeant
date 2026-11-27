@@ -11,7 +11,9 @@
     "bench": "vitest bench --run"
   },
   "devDependencies": {
+    "tsup": "8.3.5",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"
-  }
+  },
+  "packageManager": "pnpm@12.14.0"
 }

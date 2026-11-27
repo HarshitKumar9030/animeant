@@ -1,12 +1,50 @@
 {
   "name": "@animeant/canvas",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Canvas2D renderer for Animeant",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "build": "tsc -b" },
-  "dependencies": { "@animeant/core": "workspace:*" },
-  "license": "MIT"
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean --target es2022 --sourcemap",
+    "prepublishOnly": "pnpm build"
+  },
+  "dependencies": {
+    "@animeant/core": "workspace:^"
+  },
+  "license": "MIT",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HarshitKumar9030/animeant.git",
+    "directory": "packages/canvas"
+  },
+  "homepage": "https://github.com/HarshitKumar9030/animeant#readme",
+  "bugs": "https://github.com/HarshitKumar9030/animeant/issues",
+  "keywords": [
+    "animation",
+    "canvas",
+    "renderer",
+    "skeletal"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "author": "Harshit Kumar"
 }
