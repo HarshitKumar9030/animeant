@@ -49,6 +49,8 @@ ticker.onFrame(() => renderer.draw(fig));
 ticker.start();
 ```
 
+3D works the same way: `Figure3D.fromRig(humanoid3d)`, `Chain3D` IK with hinge joints, and the same `Animator` with `x y z rx ry rz` channels.
+
 ESM only, zero runtime dependencies, written in TypeScript with types included.
 
 ## Packages
@@ -57,6 +59,9 @@ ESM only, zero runtime dependencies, written in TypeScript with types included.
 |---|---|
 | `@animeant/core` | Node graph, FK, joint limits, FABRIK/CCD IK, tweens, JSON clips, layered animator, spring chains, ragdoll, fixed-step ticker |
 | `@animeant/canvas` | Canvas2D renderer: per-bone widths, focus, effector, target, limit and floor overlays |
+| `@animeant/three` | three.js `FigureView` for 3D figures |
+| `@animeant/mcp` | MCP server so AI agents can build, pose, solve, animate and render figures |
+| `skills/animeant` | Agent skill: the API, conventions and pitfalls in one file |
 | `packages/wasm` | Rust hot paths, reserved until profiling says so |
 | `apps/playground` | Live demo and docs |
 

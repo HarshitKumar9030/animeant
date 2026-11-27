@@ -82,3 +82,20 @@ What remains is structural: every joint turn dirties its subtree, so FABRIK on a
 is O(n²) in matrix rebuilds. WASM would not fix that, and the node tree lives in JS objects, so
 each step would copy every node across the boundary. `packages/wasm` stays empty until a scene
 we care about misses its frame budget after the TypeScript is tight.
+
+## 018 — 3D nodes keep a quaternion, expose Euler
+`Node3D` stores its rotation as a quaternion (no gimbal lock for solvers) and exposes
+`rx/ry/rz` as XYZ Euler so clips and tweens can animate one axis. The Euler mirror stays
+authoritative while channels are being set, so sequential single-axis writes don't drift.
+Limits are per-axis Euler ranges; an axis with min === max is locked.
+
+## 019 — Hinges rotate only about their axis; hinge chains default to CCD
+Clamping a free shortest-arc rotation onto one axis throws most of the bend away, and a straight
+hinge has no plane to bend in, so FABRIK picks the wrong side. Hinge joints project the target
+onto their plane and turn about their axis, straight hinges get a small bend toward their open
+side before solving, and `solver: "auto"` uses CCD when a chain contains a hinge.
+
+## 020 — One Animator for 2D and 3D
+The Animator only needs `root`, `has(name)` and `node(name)` with numeric channel properties,
+so it runs on both `Figure` and `Figure3D`. Clips declare channels; `units: "deg"` converts every
+angle channel (`rotation`, `rx`, `ry`, `rz`).
