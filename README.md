@@ -2,7 +2,7 @@
 
 Code-first 2D skeletal animation for the web, modeled around **nodes**, not whole figures.
 
-**[Try the playground →](https://harshitkumar9030.github.io/animeant/)**
+**[Try the playground →](https://harshitkumar9030.github.io/animeant/)** · **[3D](https://harshitkumar9030.github.io/animeant/3d.html)** · **[Watch the film: Walking Upright](https://harshitkumar9030.github.io/animeant/film.html)**
 
 ```bash
 npm install @animeant/core @animeant/canvas
@@ -50,6 +50,25 @@ ticker.start();
 ```
 
 3D works the same way: `Figure3D.fromRig(humanoid3d)`, `Chain3D` IK with hinge joints, and the same `Animator` with `x y z rx ry rz` channels.
+
+### Bodies, animals, and generated walks
+
+Bones can carry body shapes in `meta` (`body` for tapered limbs, `blobs` for torsos, skulls, ears, eyes). `@animeant/three`'s `BodyView` turns them into one smooth skinned mesh that follows the nodes, so a rig is both a skeleton and a model:
+
+```ts
+import { Animator, Figure3D, dog3d, dog3dClips, hominid, hominidGait } from "@animeant/core";
+import { BodyView } from "@animeant/three";
+
+const dog = Figure3D.fromRig(dog3d);
+scene.add(new BodyView(dog).object);
+new Animator(dog).play(dog3dClips.trot);
+
+// Any proportions you like: legs, arms, skull, face, brow, fur.
+const lucy = hominid({ name: "Lucy", height: 1.1, legs: 0.4, arms: 0.48, skull: [0.064, 0.066, 0.074], face: 0.85, brow: 0.6, skin: "#6e5240", fur: "#4a3628" });
+const walk = hominidGait(lucy, { crouch: 14, stride: 20 });   // feet planted by FK, speed measured
+```
+
+*Walking Upright*, the film in the playground, is five generated hominids, five generated gaits and a camera, all in code.
 
 ESM only, zero runtime dependencies, written in TypeScript with types included.
 

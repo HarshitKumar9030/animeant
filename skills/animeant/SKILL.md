@@ -125,6 +125,20 @@ scene.add(view.object);
 // picking: view.pick(raycaster, ["handL", "handR"]) → node name | null
 ```
 
+### Bodies (3D models from the rig)
+
+```ts
+import { BodyView } from "@animeant/three";
+const body = new BodyView(fig3);   // build at rest; reads meta.body / meta.blobs / root meta.bodyColor
+scene.add(body.object);
+// per frame: body.update();  fades: body.opacity = 0.5 (dithered, no sorting)
+```
+
+- `meta.body: { r: [r0, r1], squash?: [side, front], color? }` on a node gives the bone from its parent a tapered capsule.
+- `meta.blobs: [{ r: [rx, ry, rz], at?: [x, y, z], rot?, color? }]` attaches ellipsoids (skulls, torsos, ears, eyes) to a node.
+- Presets with bodies: `dog3d` (+ `dog3dClips.idle | trot | sit`) and `hominids.ape | australopithecus | habilis | erectus | sapiens`, or `hominid(params)` for your own.
+- `hominidGait(rig, { stride, crouch, lean, armSwing, quadruped })` → `{ clip, height, speed }`. Set `fig.root.y = height` before playing; move the figure at `speed` m/s to keep the feet planted.
+
 ## Rig JSON
 
 ```jsonc
