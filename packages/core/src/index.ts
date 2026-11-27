@@ -15,3 +15,13 @@ export { humanoidClips } from "./clips/humanoid";
 export { SpringChain, type SpringOptions } from "./physics/spring";
 export { Ragdoll, type RagdollOptions, type Bounds } from "./physics/ragdoll";
 export { aimAt } from "./physics/aim";
+export { ANGLE_CHANNELS } from "./anim/clip";
+export type { Animatable, ChannelHost } from "./anim/animator";
+
+// 3D
+export * from "./math3d";
+export { Node3D, type Node3DInit, type Limits3 } from "./three-d/node3d";
+export { Figure3D, type Rig3D, type Rig3DNode } from "./three-d/figure3d";
+export { Chain3D, aim3, hingeAxis, type Solve3DOptions } from "./three-d/chain3d";
+export { humanoid3d } from "./rigs/humanoid3d";
+export { humanoid3dClips, idle3d, walk3d, wave3d } from "./clips/humanoid3d";

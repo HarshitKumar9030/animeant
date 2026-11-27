@@ -1,6 +1,14 @@
-import type { Figure } from "../figure";
-import type { Node } from "../node";
 import { compileClip, sampleTrack, type Channel, type Clip, type CompiledClip } from "./clip";
+
+/** Anything with numeric channel properties: a 2D `Node` or a 3D `Node3D`. */
+export type ChannelHost = { [K in Channel]?: number };
+
+/** What the animator needs from a figure. Both `Figure` and `Figure3D` fit. */
+export interface Animatable {
+  readonly root: ChannelHost;
+  has(name: string): boolean;
+  node(name: string): ChannelHost;
+}
 
 export type BlendMode = "override" | "additive";
 
@@ -105,7 +113,7 @@ export class Playback {
 
 /** @internal One animated channel on one node, plus per-frame blend scratch. */
 export interface Slot {
-  node: Node;
+  node: ChannelHost;
   channel: Channel;
   base: number;
   rootMotion: boolean;
@@ -128,7 +136,7 @@ export interface Slot {
  * root every frame should call `rebase(figure.root)` before `update`.
  */
 export class Animator {
-  readonly figure: Figure;
+  readonly figure: Animatable;
   #playbacks: Playback[] = [];
   readonly #slots = new Map<string, Slot>();
   #seq = 0;
@@ -137,7 +145,7 @@ export class Animator {
   readonly #touched: Slot[] = [];
   readonly #summed: Slot[] = [];
 
-  constructor(figure: Figure) {
+  constructor(figure: Animatable) {
     this.figure = figure;
   }
 
@@ -149,6 +157,9 @@ export class Animator {
     const compiled = compileClip(clip);
     for (const t of compiled.tracks) {
       if (!this.figure.has(t.node)) throw new Error(`Animeant: clip "${clip.name}" targets unknown node "${t.node}"`);
+      if (typeof this.figure.node(t.node)[t.channel] !== "number") {
+        throw new Error(`Animeant: clip "${clip.name}" animates "${t.channel}", which node "${t.node}" doesn't have`);
+      }
     }
     // Starting from rest: take the current pose as the base so nothing jumps.
     if (!this.active) this.rebase();
@@ -182,11 +193,11 @@ export class Animator {
    * call with a node (and channel) when something else owns that value,
    * e.g. a host that positions the root each frame.
    */
-  rebase(node?: Node, channel?: Channel): void {
+  rebase(node?: ChannelHost, channel?: Channel): void {
     for (const slot of this.#slots.values()) {
       if (node && slot.node !== node) continue;
       if (channel && slot.channel !== channel) continue;
-      slot.base = slot.node[slot.channel];
+      slot.base = slot.node[slot.channel]!;
     }
   }
 
@@ -195,8 +206,10 @@ export class Animator {
     let slot = this.#slots.get(key);
     if (!slot) {
       const node = this.figure.node(name);
-      const rootMotion = node === this.figure.root && (channel === "x" || channel === "y");
-      slot = { node, channel, base: node[channel], rootMotion, value: 0, sumV: 0, sumW: 0, frame: -1, layer: -1 };
+      const value = node[channel];
+      if (typeof value !== "number") throw new Error(`Animeant: node "${name}" has no "${channel}" channel`);
+      const rootMotion = node === this.figure.root && (channel === "x" || channel === "y" || channel === "z");
+      slot = { node, channel, base: value, rootMotion, value: 0, sumV: 0, sumW: 0, frame: -1, layer: -1 };
       this.#slots.set(key, slot);
     }
     return slot;

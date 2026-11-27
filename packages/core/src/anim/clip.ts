@@ -1,7 +1,10 @@
 import { resolveEase, type EaseFn, type EaseName } from "./easing";
 
-export type Channel = "rotation" | "x" | "y" | "scaleX" | "scaleY";
-export const CHANNELS: readonly Channel[] = ["rotation", "x", "y", "scaleX", "scaleY"];
+/** 2D nodes use rotation/x/y/scaleX/scaleY; 3D nodes use x/y/z, rx/ry/rz (XYZ Euler) and scaleX/Y/Z. */
+export type Channel = "rotation" | "x" | "y" | "z" | "rx" | "ry" | "rz" | "scaleX" | "scaleY" | "scaleZ";
+export const CHANNELS: readonly Channel[] = ["rotation", "x", "y", "z", "rx", "ry", "rz", "scaleX", "scaleY", "scaleZ"];
+/** Channels whose keys are converted when a clip uses `units: "deg"`. */
+export const ANGLE_CHANNELS: readonly Channel[] = ["rotation", "rx", "ry", "rz"];
 
 /** [time in seconds, value, ease from this key to the next]. */
 export type Key = [t: number, v: number, ease?: EaseName];
@@ -51,7 +54,7 @@ export function compileClip(clip: Clip): CompiledClip {
       if (!CHANNELS.includes(channel)) throw new Error(`Animeant: unknown channel "${channel}" on "${node}"`);
       if (!keys.length) continue;
       const sorted = [...keys].sort((a, b) => a[0] - b[0]);
-      const k = channel === "rotation" ? toRad : 1;
+      const k = ANGLE_CHANNELS.includes(channel) ? toRad : 1;
       tracks.push({
         node,
         channel,
