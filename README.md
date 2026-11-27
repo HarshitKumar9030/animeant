@@ -2,6 +2,8 @@
 
 Code-first 2D skeletal animation for the web, modeled around **nodes**, not whole figures.
 
+**[Try the playground →](https://harshitkumar9030.github.io/animeant/)**
+
 ```bash
 npm install @animeant/core @animeant/canvas
 ```
