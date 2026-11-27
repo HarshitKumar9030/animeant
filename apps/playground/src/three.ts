@@ -2,8 +2,6 @@ import {
   Animator,
   Figure3D,
   Ticker,
-  humanoid3d,
-  humanoid3dClips,
   quat,
   quatSlerp,
   radToDeg,
@@ -15,8 +13,10 @@ import {
   type Quat,
   type Vec3,
 } from "@animeant/core";
-import { FigureView } from "@animeant/three";
+import { BodyView, FigureView } from "@animeant/three";
+import { creatures } from "./creatures";
 import {
+  ACESFilmicToneMapping,
   CircleGeometry, Color, DirectionalLight, HemisphereLight, Mesh, MeshStandardMaterial, PerspectiveCamera,
   Plane, Raycaster, Scene, Vector2, Vector3, WebGLRenderer,
 } from "three";
@@ -40,7 +40,9 @@ canvas.classList.add("is-webgl");
 
 // ---------- Scene ----------
 
-const figure = Figure3D.fromRig(humanoid3d);
+const params = new URLSearchParams(location.search);
+const creature = creatures[params.get("c") ?? "sapiens"] ?? creatures.sapiens!;
+const figure = Figure3D.fromRig(creature.rig);
 const rest = new Map<Node3D, Quat>(figure.nodes.map((n) => [n, n.quaternion]));
 const restRoot = { x: figure.root.x, y: figure.root.y, z: figure.root.z };
 
@@ -49,18 +51,20 @@ const renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 const scene = new Scene();
 const camera = new PerspectiveCamera(35, 1, 0.05, 50);
-camera.position.set(1.7, 1.45, 3.6);
+camera.position.set(creature.target[0] + creature.camera[0], creature.target[1] + creature.camera[1], creature.target[2] + creature.camera[2]);
 const controls = new OrbitControls(camera, canvas);
-controls.target.set(0, 0.78, 0);
+controls.target.set(...creature.target);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.minDistance = 1.4;
-controls.maxDistance = 7;
+const dist = Math.hypot(...creature.camera);
+controls.minDistance = dist * 0.4;
+controls.maxDistance = dist * 2.2;
 controls.maxPolarAngle = Math.PI * 0.49;
 controls.enablePan = false;
 
-scene.add(new HemisphereLight(0xffffff, 0x808088, 2.2));
-const sun = new DirectionalLight(0xffffff, 1.6);
+renderer.toneMapping = ACESFilmicToneMapping;
+scene.add(new HemisphereLight(0xfff6ee, 0x5c5a66, 1.5));
+const sun = new DirectionalLight(0xffffff, 2.2);
 sun.position.set(2, 4, 3);
 scene.add(sun);
 
@@ -70,12 +74,25 @@ floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
 
 let view: FigureView | undefined;
+let body: BodyView | undefined;
+let look: "body" | "bones" = creature.body ? (params.get("look") === "bones" ? "bones" : "body") : "bones";
+const applyLook = () => {
+  if (body) body.object.visible = look === "body";
+  // The stick view hides in body mode but stays pickable: raycasts ignore visibility.
+  view!.object.visible = look === "bones";
+};
 const applyTheme = () => {
   view?.dispose();
-  const v = new FigureView(figure, { color: css("--bone"), jointColor: css("--muted"), accent: css("--accent") });
+  const v = new FigureView(figure, { color: css("--bone"), jointColor: css("--muted"), accent: css("--accent"), headRadius: creature.body ? 0 : 0.11 });
   scene.add(v.object);
   v.highlight(selected?.name ?? null);
   view = v;
+  if (creature.body && !body) {
+    // Build the body at rest, before any clip moves the figure.
+    body = new BodyView(figure);
+    scene.add(body.object);
+  }
+  applyLook();
   floorMat.color = new Color(css("--surface-2"));
 };
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
@@ -98,12 +115,21 @@ const ticker = new Ticker({ fixedStep: 1 / 120 });
 let speed = 1;
 let paused = false;
 const current = new Map<number, Playback>();
-const chips = [...document.querySelectorAll<HTMLButtonElement>(".chip")];
-const clipFor = (name: string) => humanoid3dClips[name as keyof typeof humanoid3dClips] as Clip;
+const clipsEl = $("clips");
+creature.clips.forEach((c, i) => {
+  if (c.layer && i > 0) clipsEl.insertAdjacentHTML("beforeend", `<span class="chips-sep" aria-hidden="true"></span>`);
+  clipsEl.insertAdjacentHTML("beforeend", c.layer
+    ? `<button class="chip chip-layer" type="button" data-clip="${c.key}" aria-pressed="false" title="Plays on a layer above"><span class="chip-dot" aria-hidden="true"></span>${c.label}</button>`
+    : `<button class="chip" type="button" data-clip="${c.key}" aria-pressed="false">${c.label}</button>`);
+});
+const chips = [...clipsEl.querySelectorAll<HTMLButtonElement>(".chip")];
+const entryFor = (key: string) => creature.clips.find((c) => c.key === key)!;
+const clipFor = (key: string): Clip => entryFor(key).clip;
+const restY = figure.root.y;
 
 const syncChips = () => {
   for (const chip of chips) {
-    const layer = chip.dataset.clip === "wave" ? 1 : 0;
+    const layer = entryFor(chip.dataset.clip!).layer ?? 0;
     const pb = current.get(layer);
     chip.setAttribute("aria-pressed", String(!!pb && !pb.stopping && pb.clip.name === clipFor(chip.dataset.clip!).name));
   }
@@ -122,15 +148,21 @@ const setPaused = (p: boolean) => {
 
 for (const chip of chips) {
   chip.addEventListener("click", () => {
-    const clip = clipFor(chip.dataset.clip!);
-    const layer = chip.dataset.clip === "wave" ? 1 : 0;
+    const entry = entryFor(chip.dataset.clip!);
+    const clip = entry.clip;
+    const layer = entry.layer ?? 0;
     const pb = current.get(layer);
     if (pb && !pb.stopping && pb.clip === clip) {
       pb.stop(0.45);
       current.delete(layer);
     } else {
       resetting = null;
-      current.set(layer, animator.play(clip, { layer, fade: 0.45, speed }));
+      if (layer === 0) {
+        // Generated gaits plant the feet from their own root height.
+        figure.root.y = entry.height ?? restY;
+        animator.rebase(figure.root);
+      }
+      current.set(layer, animator.play(clip, { layer, fade: 0.45, speed, hold: entry.hold ?? false }));
       if (paused) setPaused(false);
     }
     hint.classList.add("is-gone");
@@ -158,7 +190,7 @@ segmented($("dim"), "3d", (_, button) => {
 
 const depthOf = (n: Node3D) => { let d = 0; for (let p = n.parent; p; p = p.parent) d++; return d; };
 const rows = new Map<Node3D, HTMLLIElement>();
-let selected: Node3D = figure.node("shoulderR");
+let selected: Node3D = figure.node(creature.selected);
 
 $("count").textContent = String(figure.nodes.length);
 figure.nodes.forEach((node, i) => {
@@ -233,13 +265,9 @@ interface Drag {
   held: boolean;
   plane: Plane;
 }
-const effectors = new Map<string, Chain3D>([
-  ["handL", figure.chain("handL")],
-  ["handR", figure.chain("handR")],
-  ["footL", figure.chain("footL")],
-  ["footR", figure.chain("footR")],
-  ["head", figure.chain(["spine", "neck", "head"])],
-]);
+const effectors = new Map<string, Chain3D>(
+  Object.entries(creature.effectors).map(([end, names]) => [end, figure.chain(names)]),
+);
 const drags: Drag[] = [];
 let active: Drag | null = null;
 const raycaster = new Raycaster();
@@ -364,6 +392,7 @@ ticker.onFixed((dt) => {
 ticker.onFrame(() => {
   controls.update();
   view!.update();
+  body?.update();
   renderer.render(scene, camera);
 
   for (const a of axes) {
@@ -395,6 +424,27 @@ requestAnimationFrame(moveHighlight);
 window.addEventListener("resize", moveHighlight);
 syncChips();
 setPaused(false);
-current.set(0, animator.play(humanoid3dClips.idle, { fade: 0.6 }));
+current.set(0, animator.play(creature.clips[0]!.clip, { fade: 0.6 }));
+
+// ---------- Figure picker and look ----------
+
+const picker = $("creatures");
+for (const c of Object.values(creatures)) {
+  picker.insertAdjacentHTML("beforeend", `<button class="chip" type="button" data-c="${c.key}" aria-pressed="${c === creature}">${c.label}</button>`);
+}
+picker.addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-c]");
+  if (!b || b.dataset.c === creature.key) return;
+  picker.querySelectorAll("[aria-pressed]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  const q = new URLSearchParams({ c: b.dataset.c! });
+  if (look === "bones") q.set("look", "bones");
+  setTimeout(() => (location.search = q.toString()), 160);
+});
+const lookEl = $("look");
+if (!creature.body) lookEl.closest(".panel-row")!.classList.add("is-hidden");
+segmented(lookEl, look, (v) => { look = v as "body" | "bones"; applyLook(); });
 syncChips();
 ticker.start();
+
+// Dev-only handle for inspecting the scene from the console.
+if (import.meta.env.DEV) Object.assign(window, { __stage: { camera, controls, figure, animator } });

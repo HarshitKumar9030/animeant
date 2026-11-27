@@ -40,14 +40,7 @@
             <svg class="icon-pause" viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="2.5" width="3" height="11" rx="1"/><rect x="9.5" y="2.5" width="3" height="11" rx="1"/></svg>
             <svg class="icon-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2.9v10.2a.9.9 0 0 0 1.37.77l8.1-5.1a.9.9 0 0 0 0-1.54l-8.1-5.1A.9.9 0 0 0 4.5 2.9Z"/></svg>
           </button>
-          <div class="chips" id="clips" role="group" aria-label="Clips">
-            <button class="chip" type="button" data-clip="idle" aria-pressed="false">Idle</button>
-            <button class="chip" type="button" data-clip="walk" aria-pressed="false">Walk</button>
-            <span class="chips-sep" aria-hidden="true"></span>
-            <button class="chip chip-layer" type="button" data-clip="wave" aria-pressed="false" title="Plays on a layer above">
-              <span class="chip-dot" aria-hidden="true"></span>Wave
-            </button>
-          </div>
+          <div class="chips" id="clips" role="group" aria-label="Clips"></div>
           <div class="scrub">
             <input class="slider scrub-slider" id="scrub" type="range" min="0" max="1000" value="0" aria-label="Seek" disabled />
             <span class="scrub-time" id="scrub-time">0.00s</span>
@@ -68,6 +61,15 @@
         <div class="panel-head">
           <span class="panel-title">Nodes</span>
           <span class="panel-count" id="count"></span>
+        </div>
+        <div class="creatures" id="creatures" role="group" aria-label="Figure"></div>
+        <div class="panel-row">
+          <span class="panel-label">Show</span>
+          <div class="segmented segmented-sm" id="look" role="radiogroup" aria-label="Show">
+            <span class="segmented-pill"></span>
+            <button type="button" role="radio" data-value="body">Body</button>
+            <button type="button" role="radio" data-value="bones">Bones</button>
+          </div>
         </div>
         <div class="axes" id="axes">
           <label class="axis"><span class="axis-name">X</span><input class="slider" type="range" data-axis="rx" step="1" aria-label="X rotation" /><span class="axis-value">0°</span></label>

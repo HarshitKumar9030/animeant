@@ -579,3 +579,10 @@ button { background: none; border: 0; cursor: pointer; }
 .axis.is-locked .slider { pointer-events: none; }
 .axis { transition: opacity var(--base) var(--ease-out); }
 .axis .slider { grid-column: auto; }
+.creatures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.creatures .chip { height: 28px; }
