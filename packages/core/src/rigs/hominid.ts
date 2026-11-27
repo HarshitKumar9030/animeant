@@ -26,6 +26,8 @@ export interface HominidParams {
   hair?: string;
   /** Color of a wrap around the hips, if any. */
   wrap?: string;
+  /** Carry a stone hand axe in the right hand. */
+  tool?: boolean;
 }
 
 /**
@@ -59,8 +61,8 @@ export function hominid(p: HominidParams): Rig3D {
   const surfaceZ = (x: number, y: number) => cz + sz * Math.sqrt(Math.max(0, 1 - ((y - cy) / sy) ** 2 - (x / sx) ** 2));
   const eyeY = cy - sy * 0.2, eyeX = sx * 0.4;
   const eyeZ = surfaceZ(eyeX, eyeY) - 0.004;
-  const jaw: [number, number, number] = [sx * 0.7, sy * 0.5, 0.045 + p.face * 0.04];
-  const jawAt: [number, number, number] = [0, cy - sy * 0.62, cz + sz * 0.55 + p.face * 0.035];
+  const jaw: [number, number, number] = [sx * (0.7 + p.face * 0.08), sy * (0.5 + p.face * 0.08), 0.045 + p.face * 0.028];
+  const jawAt: [number, number, number] = [0, cy - sy * 0.62, cz + sz * 0.55 + p.face * 0.026];
   const noseZ = Math.max(eyeZ + 0.012, jawAt[2] + jaw[2] * 0.75);
   const fur = p.fur ?? p.skin;
 
@@ -68,13 +70,16 @@ export function hominid(p: HominidParams): Rig3D {
     name: p.name,
     dimensions: 3,
     nodes: [
-      { name: "hips", y: hipsY, meta: { blobs: [{ r: [0.15 * w, 0.1 * w, 0.105 * w], at: [0, 0.01, -0.005], color: wrap }] } },
+      { name: "hips", y: hipsY, meta: { blobs: [{ r: [0.145 * w, 0.105 * w, 0.1 * w], at: [0, 0.01, -0.005], color: wrap }] } },
       {
         name: "spine", parent: "hips", y: trunk * 0.5, limits: { x: r(-30, 70), y: r(-45, 45), z: r(-30, 30) },
         meta: {
-          body: { r: [0.12 * w, 0.115 * w], squash: [1.05, 0.68], color: body },
-          // Ribcage: one ellipsoid from the waist to the collarbones.
-          blobs: [{ r: [0.16 * w, trunk * 0.33, 0.105 * w], at: [0, trunk * 0.2, 0.005], color: body }],
+          body: { r: [0.135 * w, 0.13 * w], squash: [1.02, 0.72], color: body },
+          // Belly and ribcage overlap so the trunk reads as one shape, widest at the chest.
+          blobs: [
+            { r: [0.135 * w, trunk * 0.3, 0.098 * w], at: [0, -trunk * 0.12, 0.006], color: body },
+            { r: [0.152 * w, trunk * 0.32, 0.102 * w], at: [0, trunk * 0.2, 0.004], color: body },
+          ],
         },
       },
       {
@@ -106,7 +111,16 @@ export function hominid(p: HominidParams): Rig3D {
       { name: "handL", parent: "elbowL", y: -arm * 0.47, meta: { body: { r: [0.04 * w, 0.03 * w], color: body }, blobs: [{ r: [0.022 * w, 0.05 * k, 0.034 * w], at: [0, -0.045 * k, 0.005], color: p.skin }] } },
       { name: "shoulderR", parent: "neck", x: -shoulderX, y: -0.045 * k, limits: { x: r(-180, 60), y: r(-90, 90), z: r(-180, 20) }, meta: { body: { r: [0.06 * w, 0.058 * w], color: body } } },
       { name: "elbowR", parent: "shoulderR", y: -arm * 0.53, limits: { x: r(-150, 0), y: r(0, 0), z: r(0, 0) }, meta: { body: { r: [0.05 * w, 0.04 * w], color: body } } },
-      { name: "handR", parent: "elbowR", y: -arm * 0.47, meta: { body: { r: [0.04 * w, 0.03 * w], color: body }, blobs: [{ r: [0.022 * w, 0.05 * k, 0.034 * w], at: [0, -0.045 * k, 0.005], color: p.skin }] } },
+      {
+        name: "handR", parent: "elbowR", y: -arm * 0.47,
+        meta: {
+          body: { r: [0.04 * w, 0.03 * w], color: body },
+          blobs: [
+            { r: [0.022 * w, 0.05 * k, 0.034 * w], at: [0, -0.045 * k, 0.005], color: p.skin },
+            ...(p.tool ? [{ r: [0.016, 0.062, 0.038] as [number, number, number], at: [0, -0.1 * k, 0.03] as [number, number, number], rot: [0.5, 0, 0] as [number, number, number], color: "#8f8676", detail: 10 }] : []),
+          ],
+        },
+      },
 
       { name: "hipL", parent: "hips", x: 0.095 * w, y: -0.04 * k, limits: { x: r(-120, 35), y: r(-45, 45), z: r(-20, 70) }, meta: { body: { r: [0.1 * w, 0.09 * w], color: wrap } } },
       { name: "kneeL", parent: "hipL", y: -thigh, limits: { x: r(0, 150), y: r(0, 0), z: r(0, 0) }, meta: { body: { r: [0.085 * w, 0.055 * w], color: wrap === body ? body : wrap } } },
@@ -123,8 +137,8 @@ export function hominid(p: HominidParams): Rig3D {
 /** Five steps along the human line, for demos. Proportions are approximate. */
 export const hominids = {
   ape: hominid({ name: "Miocene ape", height: 1.25, legs: 0.36, arms: 0.56, build: 1.25, skull: [0.068, 0.066, 0.075], face: 1, brow: 0.7, skin: "#5a4436", fur: "#2f241d" }),
-  australopithecus: hominid({ name: "Australopithecus afarensis", height: 1.1, legs: 0.4, arms: 0.48, build: 1.2, skull: [0.064, 0.066, 0.074], face: 0.85, brow: 0.6, skin: "#6e5240", fur: "#4a3628" }),
-  habilis: hominid({ name: "Homo habilis", height: 1.3, legs: 0.43, arms: 0.46, build: 1.08, skull: [0.068, 0.072, 0.082], face: 0.55, brow: 0.5, skin: "#785640", fur: "#5b4331" }),
-  erectus: hominid({ name: "Homo erectus", height: 1.7, legs: 0.48, arms: 0.44, build: 1.02, skull: [0.068, 0.07, 0.092], face: 0.35, brow: 0.95, skin: "#6b4630", hair: "#1e1611", wrap: "#7a5b3a" }),
-  sapiens: hominid({ name: "Homo sapiens", height: 1.76, legs: 0.47, arms: 0.44, build: 0.96, skull: [0.074, 0.086, 0.096], face: 0.05, brow: 0.12, skin: "#b9805a", hair: "#2a1c13", wrap: "#4f5a63" }),
+  australopithecus: hominid({ name: "Australopithecus afarensis", height: 1.1, legs: 0.4, arms: 0.48, build: 1.2, skull: [0.064, 0.066, 0.074], face: 0.7, brow: 0.6, skin: "#6e5240", fur: "#4a3628" }),
+  habilis: hominid({ name: "Homo habilis", height: 1.3, legs: 0.43, arms: 0.46, build: 1.08, skull: [0.068, 0.072, 0.082], face: 0.55, brow: 0.5, skin: "#785640", fur: "#5b4331", tool: true }),
+  erectus: hominid({ name: "Homo erectus", height: 1.7, legs: 0.48, arms: 0.44, build: 1.02, skull: [0.068, 0.07, 0.092], face: 0.35, brow: 0.95, skin: "#6b4630", hair: "#1e1611", wrap: "#7a5b3a", tool: true }),
+  sapiens: hominid({ name: "Homo sapiens", height: 1.76, legs: 0.47, arms: 0.44, build: 0.96, skull: [0.074, 0.086, 0.096], face: 0.05, brow: 0.12, skin: "#b9805a", hair: "#2a1c13", wrap: "#8a6a48" }),
 };

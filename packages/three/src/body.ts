@@ -32,7 +32,7 @@ export interface BodyOptions {
   /** Color for parts without their own. Default: the root's `meta.bodyColor`. */
   color?: ColorRepresentation;
   roughness?: number;
-  /** Fraction of a segment at each end that blends into its neighbor. Default 0.35. */
+  /** Fraction of a segment at each end that blends into its neighbor. Default 0.45. */
   blend?: number;
   radialSegments?: number;
 }
@@ -81,7 +81,7 @@ export class BodyView {
     this.#nodes = figure.nodes;
     const index = new Map(this.#nodes.map((n, i) => [n, i]));
     const base = new Color(opts.color ?? (figure.root.meta.bodyColor as ColorRepresentation | undefined) ?? 0xd9c2a7);
-    const blend = opts.blend ?? 0.35;
+    const blend = opts.blend ?? 0.45;
     const radial = opts.radialSegments ?? 18;
     const b: Builder = { pos: [], col: [], idx: [], skinI: [], skinW: [] };
 
