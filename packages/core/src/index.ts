@@ -25,3 +25,7 @@ export { Figure3D, type Rig3D, type Rig3DNode } from "./three-d/figure3d";
 export { Chain3D, aim3, hingeAxis, type Solve3DOptions } from "./three-d/chain3d";
 export { humanoid3d } from "./rigs/humanoid3d";
 export { humanoid3dClips, idle3d, walk3d, wave3d } from "./clips/humanoid3d";
+export { dog3d } from "./rigs/dog3d";
+export { dog3dClips, dogIdle, dogTrot, dogSit, cycleKeys } from "./clips/dog3d";
+export { hominid, hominids, type HominidParams } from "./rigs/hominid";
+export { hominidGait, type GaitParams, type Gait } from "./clips/gait";
