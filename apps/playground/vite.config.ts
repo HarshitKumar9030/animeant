@@ -7,7 +7,7 @@ export default defineConfig({
   base: "./",
   build: {
     rollupOptions: {
-      input: { main: resolve(__dirname, "index.html"), three: resolve(__dirname, "3d.html") },
+      input: { main: resolve(__dirname, "index.html"), three: resolve(__dirname, "3d.html"), film: resolve(__dirname, "film.html") },
     },
   },
 });
