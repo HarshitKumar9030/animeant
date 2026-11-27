@@ -254,9 +254,11 @@ export class BodyView {
 
   /** 0..1, for fades between figures. */
   set opacity(v: number) {
+    // Dithered (hashed) alpha: no sorting, so overlapping parts and
+    // crossfading figures stay clean.
     this.material.opacity = v;
-    this.material.transparent = v < 1;
-    this.material.depthWrite = v >= 0.999;
+    const hashed = v < 0.999;
+    if (this.material.alphaHash !== hashed) { this.material.alphaHash = hashed; this.material.needsUpdate = true; }
     this.mesh.visible = v > 0.001;
   }
   get opacity(): number { return this.material.opacity; }
